@@ -2,24 +2,9 @@
 
 ### AI-native builder — I ship software and business systems by directing AI agent teams.
 
-```mermaid
-mindmap
-  root((Stack))
-    Languages
-      TypeScript
-      JavaScript
-      Python
-      SQL
-      PowerShell
-    Web
-      HTML
-      CSS
-    Data
-      Postgres
-    AI tooling
-      Claude Code
-      Codex
-```
+<p align="center">
+  <img src="assets/stack-map.svg" alt="Stack map: languages (TypeScript, JavaScript, Python, SQL, PowerShell), web (HTML, CSS), data (Postgres), AI tooling (Claude Code, Codex)" />
+</p>
 
 <p align="center">
   <img src="assets/languages.svg" height="165" alt="Language share across my repositories" />
