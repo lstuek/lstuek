@@ -4,7 +4,7 @@ Runs locally (uses the existing `gh` login and local Claude Code / Codex logs).
 Only aggregates leave this machine: no repo, project, or client names.
 
     python scripts/update.py          # regenerate files
-    python scripts/update.py --push   # regenerate, commit, push
+    python scripts/update.py --push   # regenerate, commit, push (skips if run < 5h ago; --force overrides)
 """
 import collections
 import datetime as dt
@@ -21,6 +21,7 @@ USER = "lstuek"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
 HOME = os.path.expanduser("~")
+MIN_GAP_HOURS = 5  # scheduled runs closer together than this are skipped
 
 BG, BORDER, TEXT, MUTED, ACCENT = "#0d1117", "#30363d", "#c9d1d9", "#8b949e", "#bc8cff"
 FONT = 'font-family="Segoe UI, Ubuntu, sans-serif"'
@@ -288,7 +289,11 @@ def git(*args, out=None):
 def main():
     push = "--push" in sys.argv
     if push:  # scheduled runs have no console: log to a local file
-        log = open(os.path.join(os.environ.get("LOCALAPPDATA", HOME), "lstuek-profile.log"), "a", encoding="utf-8")
+        local = os.environ.get("LOCALAPPDATA", HOME)
+        stamp_path = os.path.join(local, "lstuek-profile.last")
+        if "--force" not in sys.argv and os.path.exists(stamp_path) and                 dt.datetime.now().timestamp() - os.path.getmtime(stamp_path) < MIN_GAP_HOURS * 3600:
+            return  # ran recently (wake/catch-up duplicates): skip silently
+        log = open(os.path.join(local, "lstuek-profile.log"), "a", encoding="utf-8")
         sys.stdout = sys.stderr = log
         print(f"--- {dt.datetime.now():%Y-%m-%d %H:%M} {platform.node()}", flush=True)
         if git("pull", "--rebase", "--autostash", out=log):
@@ -345,6 +350,7 @@ def main():
             if git("push", out=log):  # e.g. the other machine pushed first: drop our commit, next run regenerates
                 git("reset", "--keep", "HEAD~1", out=log)
                 sys.exit("push failed; will retry next run")
+        open(stamp_path, "w").close()  # mark success; failures retry on the next trigger
 
 
 if __name__ == "__main__":
