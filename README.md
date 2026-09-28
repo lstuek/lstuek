@@ -13,11 +13,10 @@
 **🤖 AI Coding This Week**
 
 ```text
-🔤 54.0M input tokens · 295.5K output tokens
-🧠 6 sessions · 59 prompts
+🔤 46.6M input tokens · 214.5K output tokens
+🧠 5 sessions · 49 prompts
 
-Opus          46,824,915 tokens     ██████████████████████░░░   86.3 %
-Fable         7,428,380 tokens      ███░░░░░░░░░░░░░░░░░░░░░░   13.7 %
+Opus          46,824,915 tokens     █████████████████████████  100.0 %
 ```
 
 **I'm a Daytime builder, most active on Wednesday** <sub>(commits + AI prompts on record)</sub>
@@ -48,4 +47,4 @@ Sunday        0 events              ░░░░░░░░░░░░░░�
   <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/powershell/powershell-original.svg" height="40" alt="PowerShell" />
 </p>
 
-<p align="center"><!--UPDATED:START--><sub>Last updated 2026-09-27 17:23 Pacific Daylight Time</sub><!--UPDATED:END--></p>
+<p align="center"><!--UPDATED:START--><sub>Last updated 2026-09-28 00:00 Pacific Daylight Time</sub><!--UPDATED:END--></p>
