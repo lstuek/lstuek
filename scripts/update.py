@@ -104,6 +104,8 @@ def scan_logs():
         p[f"{t:%Y-%m-%dT%H}"] = p.get(f"{t:%Y-%m-%dT%H}", 0) + 1
 
     for path in glob.glob(os.path.join(HOME, ".claude", "projects", "*", "*.jsonl")):
+        if "claude-mem-observer" in path:  # claude-mem's background summarizer, not my sessions
+            continue
         for d in read_jsonl(path):
             if "timestamp" not in d:
                 continue
