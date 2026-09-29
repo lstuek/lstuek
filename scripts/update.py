@@ -18,6 +18,7 @@ import subprocess
 import sys
 
 USER = "lstuek"
+OWNERS = (USER, "lbstuek")  # my account and my org; repos are read under whichever owns them
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
 HOME = os.path.expanduser("~")
@@ -40,14 +41,18 @@ def gh_lines(*args):
 
 
 def repos():
-    data = json.loads("\n".join(gh_lines("repo", "list", USER, "--limit", "200", "--json", "name,isFork")) or "[]")
-    return [r["name"] for r in data if not r["isFork"] and r["name"] != USER]
+    """Non-fork repos as "owner/name"."""
+    out = []
+    for o in OWNERS:
+        data = json.loads("\n".join(gh_lines("repo", "list", o, "--limit", "200", "--json", "name,isFork")) or "[]")
+        out += [f"{o}/{r['name']}" for r in data if not r["isFork"] and r["name"] != o]
+    return out
 
 
 def commit_times(names):
     out = []
     for n in names:
-        for s in gh_lines("api", "--paginate", f"repos/{USER}/{n}/commits?per_page=100",
+        for s in gh_lines("api", "--paginate", f"repos/{n}/commits?per_page=100",
                           "--jq", '.[] | select(.author.type != "Bot") | .commit.author.date'):
             out.append(dt.datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone())
     return out
@@ -57,7 +62,7 @@ def language_shares(names):
     """Each repo counts equally, so one huge or generated-heavy repo can't dominate."""
     total = collections.Counter()
     for n in names:
-        langs = json.loads("\n".join(gh_lines("api", f"repos/{USER}/{n}/languages")) or "{}")
+        langs = json.loads("\n".join(gh_lines("api", f"repos/{n}/languages")) or "{}")
         size = sum(langs.values())
         for k, v in langs.items():
             total[k] += v / size
@@ -279,7 +284,7 @@ def commits_svg(counts):
 
 def check_private(texts, names):
     """Hard stop if any repo name leaks into a public file."""
-    for name in names:
+    for name in (n.split("/")[1] for n in names):
         for t in texts:
             if re.search(rf"\b{re.escape(name)}\b", t, re.I):
                 sys.exit(f"privacy check failed: repo name {name!r} found in output")
