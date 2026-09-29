@@ -103,14 +103,15 @@ def scan_logs():
         p = rec(path)["prompts"]
         p[f"{t:%Y-%m-%dT%H}"] = p.get(f"{t:%Y-%m-%dT%H}", 0) + 1
 
-    for path in glob.glob(os.path.join(HOME, ".claude", "projects", "*", "*.jsonl")):
+    for path in glob.glob(os.path.join(HOME, ".claude", "projects", "**", "*.jsonl"), recursive=True):
         if "claude-mem-observer" in path:  # claude-mem's background summarizer, not my sessions
             continue
+        sub = os.sep + "subagents" + os.sep in path  # subagent tokens count; their briefs are not my prompts
         for d in read_jsonl(path):
             if "timestamp" not in d:
                 continue
             t, msg = ts(d["timestamp"]), d.get("message") or {}
-            if d.get("type") == "user" and not d.get("isMeta"):
+            if d.get("type") == "user" and not d.get("isMeta") and not sub:
                 c = msg.get("content")
                 if isinstance(c, str) or (isinstance(c, list) and any(x.get("type") == "text" for x in c)):
                     prompt(path, t)
