@@ -13,13 +13,14 @@
 **🤖 AI Coding This Week**
 
 ```text
-🔤 544.4M input tokens · 2.5M output tokens
-🧠 102 sessions · 539 prompts
+🔤 1.2B input tokens · 2.8M output tokens
+🧠 102 sessions · 540 prompts
 
-Opus          441,629,902 tokens    ████████████████████░░░░░   80.7 %
-Fable         101,281,772 tokens    █████░░░░░░░░░░░░░░░░░░░░   18.5 %
-GPT (Codex)   3,355,952 tokens      ░░░░░░░░░░░░░░░░░░░░░░░░░    0.6 %
-Haiku         660,901 tokens        ░░░░░░░░░░░░░░░░░░░░░░░░░    0.1 %
+Opus          633,039,807 tokens    █████████████░░░░░░░░░░░░   53.3 %
+Sonnet        446,071,717 tokens    █████████░░░░░░░░░░░░░░░░   37.5 %
+Fable         101,790,544 tokens    ██░░░░░░░░░░░░░░░░░░░░░░░    8.6 %
+Haiku         4,304,999 tokens      ░░░░░░░░░░░░░░░░░░░░░░░░░    0.4 %
+GPT (Codex)   3,355,952 tokens      ░░░░░░░░░░░░░░░░░░░░░░░░░    0.3 %
 ```
 
 **I'm a Evening builder, most active on Wednesday** <sub>(commits + AI prompts on record)</sub>
@@ -28,10 +29,10 @@ Haiku         660,901 tokens        ░░░░░░░░░░░░░░�
 🌞 Morning     649 events            ██░░░░░░░░░░░░░░░░░░░░░░░    7.8 %
 🌆 Daytime     2,794 events          ████████░░░░░░░░░░░░░░░░░   33.6 %
 🌃 Evening     3,310 events          ██████████░░░░░░░░░░░░░░░   39.8 %
-🌙 Night       1,573 events          █████░░░░░░░░░░░░░░░░░░░░   18.9 %
+🌙 Night       1,574 events          █████░░░░░░░░░░░░░░░░░░░░   18.9 %
 
-Monday        1,353 events          ████░░░░░░░░░░░░░░░░░░░░░   16.3 %
-Tuesday       616 events            ██░░░░░░░░░░░░░░░░░░░░░░░    7.4 %
+Monday        1,353 events          ████░░░░░░░░░░░░░░░░░░░░░   16.2 %
+Tuesday       617 events            ██░░░░░░░░░░░░░░░░░░░░░░░    7.4 %
 Wednesday     1,566 events          █████░░░░░░░░░░░░░░░░░░░░   18.8 %
 Thursday      1,500 events          █████░░░░░░░░░░░░░░░░░░░░   18.0 %
 Friday        1,540 events          █████░░░░░░░░░░░░░░░░░░░░   18.5 %
@@ -50,4 +51,4 @@ Sunday        433 events            █░░░░░░░░░░░░░�
   <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/powershell/powershell-original.svg" height="40" alt="PowerShell" />
 </p>
 
-<p align="center"><!--UPDATED:START--><sub>Last updated 2026-09-29 01:33 Pacific Daylight Time</sub><!--UPDATED:END--></p>
+<p align="center"><!--UPDATED:START--><sub>Last updated 2026-09-29 01:38 Pacific Daylight Time</sub><!--UPDATED:END--></p>
