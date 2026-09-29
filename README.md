@@ -16,10 +16,10 @@
 🔤 1.2B input tokens · 2.8M output tokens
 🧠 102 sessions · 540 prompts
 
-Opus          633,039,807 tokens    █████████████░░░░░░░░░░░░   53.3 %
-Sonnet        446,071,717 tokens    █████████░░░░░░░░░░░░░░░░   37.5 %
-Fable         101,790,544 tokens    ██░░░░░░░░░░░░░░░░░░░░░░░    8.6 %
-Haiku         4,304,999 tokens      ░░░░░░░░░░░░░░░░░░░░░░░░░    0.4 %
+Opus          676,707,286 tokens    ██████████████░░░░░░░░░░░   54.9 %
+Sonnet        446,071,717 tokens    █████████░░░░░░░░░░░░░░░░   36.2 %
+Fable         101,790,544 tokens    ██░░░░░░░░░░░░░░░░░░░░░░░    8.3 %
+Haiku         4,304,999 tokens      ░░░░░░░░░░░░░░░░░░░░░░░░░    0.3 %
 GPT (Codex)   3,355,952 tokens      ░░░░░░░░░░░░░░░░░░░░░░░░░    0.3 %
 ```
 
@@ -51,4 +51,4 @@ Sunday        433 events            █░░░░░░░░░░░░░�
   <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/powershell/powershell-original.svg" height="40" alt="PowerShell" />
 </p>
 
-<p align="center"><!--UPDATED:START--><sub>Last updated 2026-09-29 06:00 Pacific Daylight Time</sub><!--UPDATED:END--></p>
+<p align="center"><!--UPDATED:START--><sub>Last updated 2026-09-29 12:00 Pacific Daylight Time</sub><!--UPDATED:END--></p>
