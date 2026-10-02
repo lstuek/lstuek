@@ -13,13 +13,13 @@
 **🤖 AI Coding This Week**
 
 ```text
-🔤 722.1M input tokens · 1.4M output tokens
-🧠 33 sessions · 226 prompts
+🔤 451.0M input tokens · 935.9K output tokens
+🧠 25 sessions · 177 prompts
 
-Sonnet        404,017,825 tokens    ██████████████░░░░░░░░░░░   55.8 %
-Opus          316,287,983 tokens    ███████████░░░░░░░░░░░░░░   43.7 %
-Haiku         2,829,991 tokens      ░░░░░░░░░░░░░░░░░░░░░░░░░    0.4 %
-GPT (Codex)   328,803 tokens        ░░░░░░░░░░░░░░░░░░░░░░░░░    0.0 %
+Sonnet        255,975,752 tokens    ██████████████░░░░░░░░░░░   56.6 %
+Opus          193,455,290 tokens    ███████████░░░░░░░░░░░░░░   42.8 %
+Haiku         2,152,316 tokens      ░░░░░░░░░░░░░░░░░░░░░░░░░    0.5 %
+GPT (Codex)   328,803 tokens        ░░░░░░░░░░░░░░░░░░░░░░░░░    0.1 %
 ```
 
 **I'm a Evening builder, most active on Wednesday** <sub>(commits + AI prompts on record)</sub>
@@ -50,4 +50,4 @@ Sunday        433 events            █░░░░░░░░░░░░░�
   <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/powershell/powershell-original.svg" height="40" alt="PowerShell" />
 </p>
 
-<p align="center"><!--UPDATED:START--><sub>Last updated 2026-10-01 01:07 Pacific Daylight Time</sub><!--UPDATED:END--></p>
+<p align="center"><!--UPDATED:START--><sub>Last updated 2026-10-02 00:15 Pacific Daylight Time</sub><!--UPDATED:END--></p>
