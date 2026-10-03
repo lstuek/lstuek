@@ -13,11 +13,11 @@
 **🤖 AI Coding This Week**
 
 ```text
-🔤 451.0M input tokens · 935.9K output tokens
-🧠 25 sessions · 177 prompts
+🔤 441.1M input tokens · 915.4K output tokens
+🧠 24 sessions · 176 prompts
 
-Sonnet        255,975,752 tokens    ██████████████░░░░░░░░░░░   56.6 %
-Opus          193,455,290 tokens    ███████████░░░░░░░░░░░░░░   42.8 %
+Sonnet        253,235,324 tokens    ██████████████░░░░░░░░░░░   57.3 %
+Opus          186,294,575 tokens    ███████████░░░░░░░░░░░░░░   42.1 %
 Haiku         2,152,316 tokens      ░░░░░░░░░░░░░░░░░░░░░░░░░    0.5 %
 GPT (Codex)   328,803 tokens        ░░░░░░░░░░░░░░░░░░░░░░░░░    0.1 %
 ```
@@ -50,4 +50,4 @@ Sunday        433 events            █░░░░░░░░░░░░░�
   <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/powershell/powershell-original.svg" height="40" alt="PowerShell" />
 </p>
 
-<p align="center"><!--UPDATED:START--><sub>Last updated 2026-10-02 00:15 Pacific Daylight Time</sub><!--UPDATED:END--></p>
+<p align="center"><!--UPDATED:START--><sub>Last updated 2026-10-03 00:00 Pacific Daylight Time</sub><!--UPDATED:END--></p>
