@@ -23,6 +23,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS = os.path.join(ROOT, "assets")
 HOME = os.path.expanduser("~")
 MIN_GAP_HOURS = 5  # scheduled runs closer together than this are skipped
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # pythonw has no console, so each child would open one
 
 BG, BORDER, TEXT, MUTED, ACCENT = "#0d1117", "#30363d", "#c9d1d9", "#8b949e", "#bc8cff"
 FONT = 'font-family="Segoe UI, Ubuntu, sans-serif"'
@@ -36,7 +37,7 @@ LANG_COLORS = {
 # ---------- GitHub (via gh CLI) ----------
 
 def gh_lines(*args):
-    r = subprocess.run(["gh", *args], capture_output=True, text=True, encoding="utf-8")
+    r = subprocess.run(["gh", *args], capture_output=True, text=True, encoding="utf-8", creationflags=NO_WINDOW)
     return r.stdout.splitlines() if r.returncode == 0 else []  # empty repos return 409
 
 
@@ -291,7 +292,7 @@ def check_private(texts, names):
 
 
 def git(*args, out=None):
-    return subprocess.run(["git", "-C", ROOT, *args], stdout=out, stderr=out).returncode
+    return subprocess.run(["git", "-C", ROOT, *args], stdout=out, stderr=out, creationflags=NO_WINDOW).returncode
 
 
 def main():
