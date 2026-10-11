@@ -1,0 +1,36 @@
+name: Profile card
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  push:
+    branches: [main]
+    paths:
+      - data/pc.json
+      - data/stack.json
+      - data/shipped.json
+      - scripts/card.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: card
+  cancel-in-progress: false
+
+jobs:
+  card:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Render and publish current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/publish_card.sh

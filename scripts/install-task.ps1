@@ -9,7 +9,7 @@ if (-not (Test-Path $pythonw)) { throw "pythonw.exe not found next to python.exe
 git -C $repo config user.name 'Lincoln'
 git -C $repo config user.email 'lincolnstuek@gmail.com'
 
-$action = New-ScheduledTaskAction -Execute $pythonw -Argument "`"$repo\scripts\update.py`" --push" -WorkingDirectory $repo
+$action = New-ScheduledTaskAction -Execute $pythonw -Argument "`"$repo\scripts\update.py`" --upload" -WorkingDirectory $repo
 $triggers = New-ScheduledTaskTrigger -Once -At (Get-Date).Date -RepetitionInterval (New-TimeSpan -Hours 6)
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -RunOnlyIfNetworkAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew
 Register-ScheduledTask -TaskName 'lstuek-profile' -Action $action -Trigger $triggers -Settings $settings -Description 'Update GitHub profile stats' -Force | Out-Null

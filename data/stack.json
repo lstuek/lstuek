@@ -1,0 +1,117 @@
+[
+  {
+    "name": "TypeScript",
+    "group": "languages",
+    "icon": "typescript"
+  },
+  {
+    "name": "JavaScript",
+    "group": "languages",
+    "icon": "javascript"
+  },
+  {
+    "name": "Python",
+    "group": "languages",
+    "icon": "python"
+  },
+  {
+    "name": "HTML",
+    "group": "languages",
+    "icon": "html5"
+  },
+  {
+    "name": "CSS",
+    "group": "languages",
+    "icon": "css3"
+  },
+  {
+    "name": "Bash",
+    "group": "languages",
+    "icon": "gnubash"
+  },
+  {
+    "name": "React",
+    "group": "frameworks",
+    "icon": "react"
+  },
+  {
+    "name": "Vite",
+    "group": "frameworks",
+    "icon": "vite"
+  },
+  {
+    "name": "Tailwind CSS",
+    "group": "frameworks",
+    "icon": "tailwindcss"
+  },
+  {
+    "name": "Framer Motion",
+    "group": "frameworks",
+    "icon": "framer"
+  },
+  {
+    "name": "Node.js",
+    "group": "frameworks",
+    "icon": "nodedotjs"
+  },
+  {
+    "name": "Bun",
+    "group": "frameworks",
+    "icon": "bun"
+  },
+  {
+    "name": "Claude Code",
+    "group": "ai",
+    "icon": "claude"
+  },
+  {
+    "name": "Codex",
+    "group": "ai",
+    "icon": null
+  },
+  {
+    "name": "Anthropic API",
+    "group": "ai",
+    "icon": "anthropic"
+  },
+  {
+    "name": "OpenAI API",
+    "group": "ai",
+    "icon": "openai"
+  },
+  {
+    "name": "Supabase",
+    "group": "data",
+    "icon": "supabase"
+  },
+  {
+    "name": "PostgreSQL",
+    "group": "data",
+    "icon": "postgresql"
+  },
+  {
+    "name": "GitHub",
+    "group": "deploy",
+    "icon": "github"
+  },
+  {
+    "name": "GitHub Actions",
+    "group": "deploy",
+    "icon": "githubactions"
+  },
+  {
+    "name": "Vercel",
+    "group": "deploy",
+    "icon": "vercel"
+  },
+  {
+    "name": "Cloudflare",
+    "group": "deploy",
+    "icon": "cloudflare"
+  },
+  {
+    "name": "Shopify",
+    "group": "deploy",
+    "icon": "shopify"
+  }
+]

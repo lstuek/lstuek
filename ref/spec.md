@@ -15,6 +15,14 @@ Goal: one SVG card on github.com/lstuek in the layout of github.com/krishhgg (re
 | 8 | Stack: a hand-kept list. Claude drafts it from the repos' package files; Lincoln trims it once on the preview. |
 | 9 | Home: personal/projects/lstuek (moved from C:\Users\Lincoln\lstuek 2026-10-10; task `lstuek-profile` re-registered there). |
 | 10 | The PC job runs with pythonw.exe, and every child process uses CREATE_NO_WINDOW. |
+| 11 | (2026-10-10, after the first preview) Two themes: light = cream background, grey text, navy accents; dark = black background, white text, sky-blue accents. The README serves the dark one to dark-mode visitors (`<picture>` with `prefers-color-scheme`). Replaces the orange print look. |
+| 12 | Softer fonts than the first preview's high-contrast serif; Lincoln picks from a rendered board. |
+| 13 | The open-source panel becomes "Shipped": live public sites Lincoln built, from a hand-kept list `data/shipped.json`. Replaces decision 7. Lincoln checks with partners before naming their sites. |
+| 15 | (2026-10-10, after the font board) Dark only: black background, white and grey text; decision 11's light card is dropped. Letters in Young Serif (name, headings), every number in Nunito's lining figures, small text in Figtree. Cyan marks only what matters: core stack tools (`"core": true` in data/stack.json: TypeScript, Python, React, Claude Code, Codex, Supabase, Vercel), the current streak, and the token bar. Everything else is white or grey. |
+| 16 | (2026-10-10, ship approval) Cyan only on: lifetime contributions number, the 3 highest bars of the 31 days, the Shipped count and bullets. Stack has no accents (no core flag); token bar and streak bar white; the "≈ N billion tokens" line is removed. Replaces decision 15's cyan list. |
+| 17 | (2026-10-10) Token bar cyan again; the top language bar and the streak bar cyan with tick marks like the token bar; the token count uses a sharper font than Nunito (Lincoln picks from a strip). Ship after Lincoln approves the render. Amends decision 16. |
+| 18 | (2026-10-10, token font strip) Every number on the card uses Archivo, not Nunito (the token count included). The small grey labels beside panel titles ("23 tools", "1,777 in the last 31 days") use Figtree uppercase with letter spacing, grey, numbers in Archivo (option a; Lincoln shipped it as shown and tweaks it live). Amends decisions 15 and 17. |
+| 14 | Stack drops Next.js, Astro, Express, Drizzle, Docker and shadcn/ui (23 tools). |
 
 ## Constraints
 - Only aggregates leave the PC: no repo, project or client names (update.py rule, kept).

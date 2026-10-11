@@ -5,6 +5,8 @@ Only aggregates leave this machine: no repo, project, or client names.
 
     python scripts/update.py          # regenerate files
     python scripts/update.py --push   # regenerate, commit, push (skips if run < 5h ago; --force overrides)
+    python scripts/update.py --upload # upload aggregates; keep the legacy renderer until cutover
+    python scripts/update.py --dry-run # print pc.json without writing or pushing
 """
 import collections
 import datetime as dt
@@ -24,6 +26,11 @@ ASSETS = os.path.join(ROOT, "assets")
 HOME = os.path.expanduser("~")
 MIN_GAP_HOURS = 5  # scheduled runs closer together than this are skipped
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # pythonw has no console, so each child would open one
+UPLOAD_CONTRIBUTIONS = False
+
+
+def state_dir():
+    return os.path.join(os.environ.get("LOCALAPPDATA", HOME), "lstuek-profile")
 
 BG, BORDER, TEXT, MUTED, ACCENT = "#0d1117", "#30363d", "#c9d1d9", "#8b949e", "#bc8cff"
 FONT = 'font-family="Segoe UI, Ubuntu, sans-serif"'
@@ -59,16 +66,29 @@ def commit_times(names):
     return out
 
 
-def language_shares(names):
-    """Each repo counts equally, so one huge or generated-heavy repo can't dominate."""
+def language_bytes(names, dry_run=False, return_snapshots=False):
+    """Keep private per-repo snapshots locally; publish only their byte sums."""
+    path = os.path.join(state_dir(), "languages.json")
+    snapshots = load_json(path)
     total = collections.Counter()
     for n in names:
-        langs = json.loads("\n".join(gh_lines("api", f"repos/{n}/languages")) or "{}")
-        size = sum(langs.values())
-        for k, v in langs.items():
-            total[k] += v / size
-    s = sum(total.values()) or 1
-    return [(k, v / s) for k, v in total.most_common()]
+        lines = gh_lines("api", f"repos/{n}/languages")
+        if lines:
+            langs = json.loads("\n".join(lines))
+            if not isinstance(langs, dict) or any(not count(v) for v in langs.values()):
+                raise ValueError("invalid language byte response")
+            snapshots[n] = langs
+        total.update(snapshots.get(n, {}))
+    if not dry_run:
+        os.makedirs(state_dir(), exist_ok=True)
+        write_json(path, snapshots)
+    return (dict(total), snapshots) if return_snapshots else dict(total)
+
+
+def language_shares(names):
+    total = collections.Counter(language_bytes(names))
+    size = sum(total.values()) or 1
+    return [(k, v / size) for k, v in total.most_common()]
 
 
 # ---------- Local AI logs ----------
@@ -97,7 +117,7 @@ def ts(s):
 def scan_logs():
     """Per-session aggregates from local logs: {session_hash: {"usage": {day: {family: [in, out]}}, "prompts": {"YYYY-MM-DDTHH": n}}}.
     Keyed by a hash of the log file name, so copies of the same session on two machines merge instead of double counting."""
-    sessions, seen = {}, set()
+    sessions = {}
     rec = lambda path: sessions.setdefault(hashlib.sha1(os.path.basename(path).encode()).hexdigest()[:12], {"usage": {}, "prompts": {}})
 
     def usage(path, t, fam, i, o):
@@ -113,7 +133,9 @@ def scan_logs():
         if "claude-mem-observer" in path:  # claude-mem's background summarizer, not my sessions
             continue
         sub = os.sep + "subagents" + os.sep in path  # subagent tokens count; their briefs are not my prompts
-        for d in read_jsonl(path):
+        rec(path)  # even an empty rebuilt log overrides its stored copy
+        messages = {}
+        for index, d in enumerate(read_jsonl(path)):
             if "timestamp" not in d:
                 continue
             t, msg = ts(d["timestamp"]), d.get("message") or {}
@@ -121,14 +143,18 @@ def scan_logs():
                 c = msg.get("content")
                 if isinstance(c, str) or (isinstance(c, list) and any(x.get("type") == "text" for x in c)):
                     prompt(path, t)
-            elif d.get("type") == "assistant" and msg.get("id") not in seen and family(msg.get("model")):
-                seen.add(msg.get("id"))  # streamed chunks repeat the same message id
+            elif d.get("type") == "assistant" and family(msg.get("model")):
                 u = msg.get("usage") or {}
                 i = u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0) + u.get("cache_read_input_tokens", 0)
-                usage(path, t, family(msg.get("model")), i, u.get("output_tokens", 0))
+                key = (msg.get("id", index), d.get("requestId", d.get("request_id")))
+                messages[key] = (t, family(msg.get("model")), i, u.get("output_tokens", 0))
+        for args in messages.values():
+            usage(path, *args)
 
     for path in glob.glob(os.path.join(HOME, ".codex", "sessions", "**", "*.jsonl"), recursive=True):
         model = None
+        previous = (0, 0)
+        rec(path)
         for d in read_jsonl(path):
             p, kind = d.get("payload") or {}, d.get("type")
             if kind == "turn_context":
@@ -138,9 +164,13 @@ def scan_logs():
                 if p.get("type") == "task_started" and model != "codex-auto-review":  # Codex's own safety reviewer, not a prompt
                     prompt(path, t)
                 elif p.get("type") == "token_count":
-                    u = ((p.get("info") or {}).get("last_token_usage")) or {}
+                    u = ((p.get("info") or {}).get("total_token_usage")) or {}
                     if u:
-                        usage(path, t, "GPT (Codex)", u.get("input_tokens", 0), u.get("output_tokens", 0))
+                        current = (u.get("input_tokens", 0), u.get("output_tokens", 0))
+                        reset = any(a < b for a, b in zip(current, previous))
+                        delta = current if reset else tuple(a - b for a, b in zip(current, previous))
+                        usage(path, t, "GPT (Codex)", *delta)
+                        previous = current
     return sessions
 
 
@@ -285,7 +315,7 @@ def commits_svg(counts):
 
 def check_private(texts, names):
     """Hard stop if any repo name leaks into a public file."""
-    for name in (n.split("/")[1] for n in names):
+    for name in (n.rsplit("/", 1)[-1] for n in names):
         for t in texts:
             if re.search(rf"\b{re.escape(name)}\b", t, re.I):
                 sys.exit(f"privacy check failed: repo name {name!r} found in output")
@@ -295,19 +325,143 @@ def git(*args, out=None):
     return subprocess.run(["git", "-C", ROOT, *args], stdout=out, stderr=out, creationflags=NO_WINDOW).returncode
 
 
+def git_text(*args):
+    result = subprocess.run(["git", "-C", ROOT, *args], capture_output=True,
+                            text=True, encoding="utf-8", creationflags=NO_WINDOW)
+    if result.returncode:
+        raise RuntimeError(f"git {args[0]} failed: {result.stderr}")
+    return result.stdout
+
+
+def load_json(path):
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def write_json(path, value):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(value, f, separators=(",", ":"), sort_keys=True)
+
+
+def count(value):
+    return type(value) is int and value >= 0
+
+
+def validate_upload(path, value, names):
+    """An allowlist, including nested keys: no arbitrary text can leave the PC."""
+    def require(ok):
+        if not ok:
+            sys.exit(f"privacy schema failed: {path}")
+
+    def day(key):
+        return isinstance(key, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", key) and dt.date.fromisoformat(key)
+
+    try:
+        require(isinstance(value, dict))
+        if path == "data/pc.json":
+            require(set(value) in ({"updated", "tokens", "languages"}, {"updated", "tokens", "languages", "contributions"}))
+            require(isinstance(value["updated"], str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value["updated"]))
+            dt.datetime.fromisoformat(value["updated"].replace("Z", "+00:00"))
+            tokens = value["tokens"]
+            require(isinstance(tokens, dict) and set(tokens) == {"total", "claude", "codex", "since"})
+            require(all(count(tokens[k]) for k in ("total", "claude", "codex")))
+            require(tokens["total"] == tokens["claude"] + tokens["codex"])
+            since = tokens["since"]
+            require(since is None or isinstance(since, str) and re.fullmatch(r"\d{4}-\d{2}", since))
+            if since is not None:
+                dt.date.fromisoformat(since + "-01")
+            require(isinstance(value["languages"], dict))
+            require(all(isinstance(k, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9+# ._-]{0,79}", k) and count(v) for k, v in value["languages"].items()))
+            if "contributions" in value:
+                require(isinstance(value["contributions"], dict))
+                require(all(day(k) and count(v) for k, v in value["contributions"].items()))
+        else:
+            require(re.fullmatch(r"data/ai-[0-9a-f]+\.json", path))
+            for session, record in value.items():
+                require(isinstance(session, str) and re.fullmatch(r"[0-9a-f]{12}", session))
+                require(isinstance(record, dict) and set(record) == {"prompts", "usage"})
+                require(isinstance(record["prompts"], dict) and isinstance(record["usage"], dict))
+                for hour, n in record["prompts"].items():
+                    require(isinstance(hour, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}", hour) and count(n))
+                    dt.datetime.strptime(hour, "%Y-%m-%dT%H")
+                for date, families in record["usage"].items():
+                    require(day(date) and isinstance(families, dict))
+                    for fam, pair in families.items():
+                        require(fam in {"Opus", "Fable", "Sonnet", "Haiku", "GPT (Codex)"})
+                        require(isinstance(pair, list) and len(pair) == 2 and all(count(n) for n in pair))
+    except (ValueError, TypeError, KeyError):
+        sys.exit(f"privacy schema failed: {path}")
+    check_private([json.dumps(value)], names)
+
+
+def rebuild_ledgers(stored, rebuilt, mine_path):
+    ledgers = {path: {**records, **{k: v for k, v in rebuilt.items() if k in records}}
+               for path, records in stored.items()}
+    ledgers[mine_path] = {**ledgers.get(mine_path, {}), **rebuilt}
+    everyone = merge(*ledgers.values())
+    uncertain = sum(weight(v) - sum(v["prompts"].values()) for k, v in everyone.items() if k not in rebuilt)
+    return ledgers, everyone, uncertain
+
+
+def pc_data(everyone, languages, per_day, now):
+    models = summarize(everyone, "")[4]
+    codex = models["GPT (Codex)"]
+    total = sum(models.values())
+    days = [day for record in everyone.values() for day in record["usage"]]
+    days += [hour[:10] for record in everyone.values() for hour in record["prompts"]]
+    value = {"updated": now.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+             "tokens": {"total": total, "claude": total - codex, "codex": codex,
+                        "since": min(days)[:7] if days else None}, "languages": languages}
+    if UPLOAD_CONTRIBUTIONS:
+        today = now.date()
+        value["contributions"] = {(today - dt.timedelta(days=i)).isoformat(): per_day[today - dt.timedelta(days=i)] for i in range(365)}
+    return value
+
+
+LEGACY_PATHS = {"README.md", "assets/languages.svg", "assets/streak.svg", "assets/commits.svg"}
+
+
+def validate_staged(names, legacy=False):
+    paths = git_text("diff", "--cached", "--name-only", "-z").split("\0")
+    for path in filter(None, paths):
+        if legacy and path in LEGACY_PATHS:
+            check_private([git_text("show", f":{path}")], names)
+        elif path == "data/pc.json" or re.fullmatch(r"data/ai-[0-9a-f]+\.json", path):
+            try:
+                value = json.loads(git_text("show", f":{path}"))
+            except (ValueError, RuntimeError):
+                sys.exit(f"privacy schema failed: {path}")
+            validate_upload(path, value, names)
+        else:
+            sys.exit(f"unexpected staged path: {path}")
+
+
+def push_retained(out=None):
+    for attempt in range(4):
+        if git("pull", "--rebase", "--autostash", out=out):
+            git("rebase", "--abort", out=out)
+            return False
+        if not git("push", out=out):
+            return True
+        print(f"push attempt {attempt + 1}/4 failed", flush=True)
+    return False
+
+
 def main():
-    push = "--push" in sys.argv
+    dry_run = "--dry-run" in sys.argv
+    upload = "--upload" in sys.argv
+    push = ("--push" in sys.argv or upload) and not dry_run
     if push:  # scheduled runs have no console: log to a local file
-        local = os.environ.get("LOCALAPPDATA", HOME)
-        stamp_path = os.path.join(local, "lstuek-profile.last")
+        local = state_dir()
+        os.makedirs(local, exist_ok=True)
+        stamp_path = os.path.join(local, "last")
         if "--force" not in sys.argv and os.path.exists(stamp_path) and                 dt.datetime.now().timestamp() - os.path.getmtime(stamp_path) < MIN_GAP_HOURS * 3600:
             return  # ran recently (wake/catch-up duplicates): skip silently
-        log = open(os.path.join(local, "lstuek-profile.log"), "a", encoding="utf-8")
+        log = open(os.path.join(local, "run.log"), "a", encoding="utf-8")
         sys.stdout = sys.stderr = log
         print(f"--- {dt.datetime.now():%Y-%m-%d %H:%M} {platform.node()}", flush=True)
-        if git("pull", "--rebase", "--autostash", out=log):
-            git("rebase", "--abort", out=log)
-            sys.exit("pull failed; will retry next run")
 
     now = dt.datetime.now().astimezone()
     today = now.date()
@@ -321,44 +475,65 @@ def main():
 
     # This machine's sessions, kept even after the local logs are pruned; other machines' files merge in.
     data_dir = os.path.join(ROOT, "data")
-    os.makedirs(data_dir, exist_ok=True)
     mine_path = os.path.join(data_dir, f"ai-{hashlib.sha1(platform.node().encode()).hexdigest()[:8]}.json")
-    load = lambda p: json.load(open(p, encoding="utf-8")) if os.path.exists(p) else {}
-    mine = merge(load(mine_path), scan_logs())
-    with open(mine_path, "w", encoding="utf-8") as f:
-        json.dump(mine, f, separators=(",", ":"), sort_keys=True)
-    everyone = merge(*(load(p) for p in sorted(glob.glob(os.path.join(data_dir, "ai-*.json")))))
+    stored = {p: load_json(p) for p in sorted(glob.glob(os.path.join(data_dir, "ai-*.json")))}
+    ledgers, everyone, uncertain = rebuild_ledgers(stored, scan_logs(), mine_path)
+    print(f"uncertain: {uncertain}", flush=True)
+    languages, snapshots = language_bytes(names, dry_run=True, return_snapshots=True)
+    pc = pc_data(everyone, languages, per_day, now)
+    validate_upload("data/pc.json", pc, names)
+    for path, records in ledgers.items():
+        validate_upload("data/" + os.path.basename(path), records, names)
+    if dry_run:
+        print(json.dumps(pc, indent=2, sort_keys=True), flush=True)
+        return
+    if push:
+        validate_staged(names, legacy=not upload)
+    os.makedirs(data_dir, exist_ok=True)
+    for path, records in ledgers.items():
+        write_json(path, records)
+    write_json(os.path.join(data_dir, "pc.json"), pc)
+    os.makedirs(state_dir(), exist_ok=True)
+    write_json(os.path.join(state_dir(), "languages.json"), snapshots)
     tin, tout, sess, prompts, models, ptimes = summarize(everyone, (today - dt.timedelta(days=6)).isoformat())
 
-    svgs = {"languages.svg": langs_svg(language_shares(names)),
-            "streak.svg": streak_svg(len(commits), cur, longest),
-            "commits.svg": commits_svg(last90)}
-    block = ai_block(tin, tout, sess, prompts, models, commits + ptimes)
-
-    readme_path = os.path.join(ROOT, "README.md")
-    with open(readme_path, encoding="utf-8") as f:
-        readme = f.read()
-    stamp = f"<sub>Last updated {now:%Y-%m-%d %H:%M %Z}</sub>"
-    readme = re.sub(r"(<!--AI:START-->).*?(<!--AI:END-->)", lambda m: f"{m[1]}\n{block}\n{m[2]}", readme, flags=re.S)
-    readme = re.sub(r"(<!--UPDATED:START-->).*?(<!--UPDATED:END-->)", lambda m: f"{m[1]}{stamp}{m[2]}", readme, flags=re.S)
-
-    check_private([readme, *svgs.values(), json.dumps(mine)], names)
-    os.makedirs(ASSETS, exist_ok=True)
-    for fn, svg in svgs.items():
-        with open(os.path.join(ASSETS, fn), "w", encoding="utf-8") as f:
-            f.write(svg)
-    with open(readme_path, "w", encoding="utf-8") as f:
-        f.write(readme)
+    if not upload:
+        size = sum(languages.values()) or 1
+        svgs = {"languages.svg": langs_svg([(k, v / size) for k, v in sorted(languages.items(), key=lambda item: -item[1])]),
+                "streak.svg": streak_svg(len(commits), cur, longest),
+                "commits.svg": commits_svg(last90)}
+        block = ai_block(tin, tout, sess, prompts, models, commits + ptimes)
+        readme_path = os.path.join(ROOT, "README.md")
+        with open(readme_path, encoding="utf-8") as f:
+            readme = f.read()
+        stamp = f"<sub>Last updated {now:%Y-%m-%d %H:%M %Z}</sub>"
+        readme = re.sub(r"(<!--AI:START-->).*?(<!--AI:END-->)", lambda m: f"{m[1]}\n{block}\n{m[2]}", readme, flags=re.S)
+        readme = re.sub(r"(<!--UPDATED:START-->).*?(<!--UPDATED:END-->)", lambda m: f"{m[1]}{stamp}{m[2]}", readme, flags=re.S)
+        check_private([readme, *svgs.values()], names)
+        os.makedirs(ASSETS, exist_ok=True)
+        for fn, svg in svgs.items():
+            with open(os.path.join(ASSETS, fn), "w", encoding="utf-8") as f:
+                f.write(svg)
+        with open(readme_path, "w", encoding="utf-8") as f:
+            f.write(readme)
     print(f"{len(names)} repos, {len(commits)} commits, streak {cur}/{longest}, "
           f"AI {sess} sessions {prompts} prompts ({len(everyone)} sessions on record)", flush=True)
 
     if push:
-        git("add", "README.md", "assets", "data", out=log)
-        if git("diff", "--staged", "--quiet"):
-            git("commit", "-m", "Update profile stats", out=log)
-            if git("push", out=log):  # e.g. the other machine pushed first: drop our commit, next run regenerates
-                git("reset", "--keep", "HEAD~1", out=log)
-                sys.exit("push failed; will retry next run")
+        paths = ["data/pc.json", *["data/" + os.path.basename(p) for p in ledgers]]
+        if not upload:
+            paths += sorted(LEGACY_PATHS)
+        if git("add", "--", *paths, out=log):
+            sys.exit("stage failed")
+        validate_staged(names, legacy=not upload)
+        diff = git("diff", "--staged", "--quiet")
+        if diff not in (0, 1):
+            sys.exit("staged diff failed")
+        if diff == 1:
+            if git("commit", "-m", "Update profile stats", out=log):
+                sys.exit("commit failed")
+        if not push_retained(out=log):
+            sys.exit("push failed; commit retained for next run")
         open(stamp_path, "w").close()  # mark success; failures retry on the next trigger
 
 
