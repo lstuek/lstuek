@@ -97,7 +97,7 @@ def test_dark_only_black_background_and_cyan_is_scarce(tmp_path):
     css = svg[svg.index("<style>"):svg.index("</style>")]
     cyan_rules = re.findall(r"([^{}]+)\{[^{}]*#5cc8ff[^{}]*\}", css)
     # lifetime number, top-3 bars, shipped count, shipped bullets, and the three bar fills (token, top language, streak)
-    assert sorted(r.strip() for r in cyan_rules) == sorted([".num.hot", ".bar.hot", ".bignum", ".sitedot", ".fill.hot"])
+    assert sorted(r.strip() for r in cyan_rules) == sorted([".num.hot", ".bar.hot", ".bignum", ".sitedot", ".fill.hot", ".ring"])
 
 
 def test_only_the_lifetime_number_is_cyan_and_the_stack_has_no_accent(tmp_path):
@@ -118,7 +118,7 @@ def test_every_number_is_archivo_and_letters_use_young_serif_and_figtree(tmp_pat
     svg = draw(tmp_path)
     css = svg[svg.index("<style>"):svg.index("</style>")]
     assert re.search(r"\.name\{font:400 100px 'Young Serif'", css) and re.search(r"\.title\{font:400 13px 'Young Serif'", css)
-    for cls, rule in ((".bigtok", "700 96px"), (".bignum", "700 76px"), (".num", "700 40px"), (".nlab", "600 12.5px"), (".peaklbl", "600 11.5px")):
+    for cls, rule in ((".bigtok", "700 78px"), (".bignum", "700 76px"), (".num", "700 36px"), (".nlab", "600 12.5px"), (".peaklbl", "600 11.5px")):
         assert re.search(re.escape(cls) + r"\{font:" + re.escape(rule) + r" Archivo", css), cls
     assert re.search(r"\.nn\{font-family:Archivo", css) and re.search(r"\.lab\{font:500 12\.5px Figtree", css)
     fams = set(re.findall(r"@font-face\{font-family:'([^']+)'", css))
@@ -181,3 +181,46 @@ def test_bars_with_ticks(tmp_path):
     assert fills.count("fill hot") == 3 and fills.count("fill") == 5  # 5 other language bars, no ticks on them
     # ticks: streak 18 of best 53 -> min(53, 20) = 19 cuts, top language 9 cuts, token 20B goal -> 19 cuts
     assert svg.count('class="tick"') == 19 + 9 + 19
+
+
+def style_block(svg):
+    return svg[svg.index("<style>"):svg.index("</style>")]
+
+
+def test_motion_is_css_only_with_a_reduced_motion_block(tmp_path):
+    svg = draw(tmp_path)
+    css = style_block(svg)
+    for name in ("rise", "grow", "shine", "ring", "pop"):
+        assert f"@keyframes {name}" in css, name
+    block = css[css.index("@media (prefers-reduced-motion:reduce)"):]
+    for sel in (".bar", ".fill.hot", ".peaklbl", ".shine", ".ring"):
+        assert sel in block.split("}")[0], sel
+    assert "animation:none" in block
+    assert "<script" not in svg and "<animate" not in svg and "<set " not in svg
+    # one-shot rise, looping shimmer and rings with a 3-4 s cycle
+    assert re.search(r"\.bar\{[^}]*animation:rise [^;}]*backwards", css) and "infinite" not in re.search(r"\.bar\{[^}]*\}", css).group(0)
+    assert re.search(r"\.shine\{animation:shine 3\.6s ease-in-out [\d.]+s infinite\}", css)
+    assert re.search(r"\.ring\{[^}]*animation:ring 3\.6s ease-out infinite", css)
+
+
+def test_resting_state_is_the_finished_card(tmp_path):
+    svg = draw(tmp_path)
+    css = style_block(svg)
+    # base styles carry no transform or hidden state outside the animations: bars at full height, dots plain, shine off the fill
+    assert not re.search(r"\.(?:bar|fill)[^{}]*\{[^}]*transform:(?!none)", css.split("@keyframes")[0])
+    assert re.search(r"\.ring\{[^}]*opacity:0", css)  # rings invisible at rest
+    assert svg.count('class="sitedot"') == 6 and svg.count('class="ring"') == 6
+    assert 'class="shine" x="' in svg and len(re.findall(r'<rect [^>]*class="bar[^"]*"[^>]*style="animation-delay:\d+ms"', svg)) == 31
+
+
+def test_same_data_gives_byte_identical_svg(tmp_path):
+    a = draw(tmp_path / "a")
+    b = draw(tmp_path / "b")
+    assert a == b
+    d = card.gather(str(FIX))
+    assert card.build(d) == card.build(d)
+
+
+def test_card_is_shorter_than_before():
+    h = int(re.search(r'<svg [^>]*height="(\d+)"', card.build(card.gather(str(FIX)))).group(1))
+    assert h < 1080 and h == 985

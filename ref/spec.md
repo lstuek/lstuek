@@ -22,6 +22,8 @@ Goal: one SVG card on github.com/lstuek in the layout of github.com/krishhgg (re
 | 16 | (2026-10-10, ship approval) Cyan only on: lifetime contributions number, the 3 highest bars of the 31 days, the Shipped count and bullets. Stack has no accents (no core flag); token bar and streak bar white; the "≈ N billion tokens" line is removed. Replaces decision 15's cyan list. |
 | 17 | (2026-10-10) Token bar cyan again; the top language bar and the streak bar cyan with tick marks like the token bar; the token count uses a sharper font than Nunito (Lincoln picks from a strip). Ship after Lincoln approves the render. Amends decision 16. |
 | 18 | (2026-10-10, token font strip) Every number on the card uses Archivo, not Nunito (the token count included). The small grey labels beside panel titles ("23 tools", "1,777 in the last 31 days") use Figtree uppercase with letter spacing, grey, numbers in Archivo (option a; Lincoln shipped it as shown and tweaks it live). Amends decisions 15 and 17. |
+| 19 | (2026-10-10, after the live card) Shorter card: the name, the contributions and totals row, and the token spend panel each lose some height. Assumption: about 15% less height each, by a smaller font and less padding, never by squashing letters. |
+| 20 | (2026-10-10) Idle animation like krishhgg's card. His motions, all SVG-native with no script: a blinking block cursor after the name, a dither pattern stepping sideways on the token bar (1.2 s), contribution bars rising once on load (0.8 s), a blinking square in the footer. Where ours goes: open. |
 | 14 | Stack drops Next.js, Astro, Express, Drizzle, Docker and shadcn/ui (23 tools). |
 
 ## Constraints
@@ -49,3 +51,5 @@ Goal: one SVG card on github.com/lstuek in the layout of github.com/krishhgg (re
 | Name | header text | LINCOLN STUEK | closed |
 | Stack | list source | Claude drafts, Lincoln trims | closed |
 | Token number | lifetime or month | lifetime, all logs on record | closed |
+| Shrink | how much, and how | about 15% less height, smaller font and padding (assumption) | closed |
+| Animation | which parts move, loop or once | asked 2026-10-10 | open |
