@@ -1,0 +1,26 @@
+[
+  {
+    "site": "lincolnstuek.com",
+    "kind": "portfolio"
+  },
+  {
+    "site": "games.lincolnstuek.com",
+    "kind": "browser games"
+  },
+  {
+    "site": "new-era-design.com",
+    "kind": "design studio"
+  },
+  {
+    "site": "bionicwave.ai",
+    "kind": "AI company"
+  },
+  {
+    "site": "trybeachbox.com",
+    "kind": "product launch"
+  },
+  {
+    "site": "katechairsoft.com",
+    "kind": "Shopify store"
+  }
+]

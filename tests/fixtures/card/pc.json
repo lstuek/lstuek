@@ -1,0 +1,23 @@
+{
+  "updated": "2026-10-11T00:29:10Z",
+  "tokens": {
+    "total": 18433327072,
+    "claude": 7183240542,
+    "codex": 11250086530,
+    "since": "2026-08"
+  },
+  "languages": {
+    "Astro": 6593,
+    "Batchfile": 347,
+    "CSS": 1428471,
+    "Dockerfile": 47466,
+    "HTML": 32050933,
+    "JavaScript": 11043926,
+    "Liquid": 2934304,
+    "PLpgSQL": 1991511,
+    "PowerShell": 11724,
+    "Python": 280154,
+    "Shell": 690836,
+    "TypeScript": 6117236
+  }
+}
