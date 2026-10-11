@@ -39,8 +39,9 @@ def test_fixture_values_appear_on_the_card(tmp_path):
         "since Aug 2026", "18.4B/20B",
         "Codex",                         # null icon: text label
     ] + [n for n, _ in top6] + [f"{b * 100 / total:.1f}%" for _, b in top6]
+    low = [x.lower() for x in shown]  # the default label style is uppercase
     for want in expected:
-        assert want in shown, f"{want!r} missing from the card"
+        assert want.lower() in low, f"{want!r} missing from the card"
     assert "56.6%" in shown and "19.5%" in shown and len(top6) == 6
     for gone in ("Next.js", "Astro", "Express", "Drizzle ORM", "Docker", "shadcn/ui"):
         assert gone not in svg
@@ -95,28 +96,60 @@ def test_dark_only_black_background_and_cyan_is_scarce(tmp_path):
     assert "#f6f1e4" not in svg and "#e8512a" not in svg
     css = svg[svg.index("<style>"):svg.index("</style>")]
     cyan_rules = re.findall(r"([^{}]+)\{[^{}]*#5cc8ff[^{}]*\}", css)
-    # lifetime number, top-3 bars, shipped count, shipped bullets
-    assert sorted(r.strip() for r in cyan_rules) == sorted([".num.hot", ".bar.hot", ".bignum", ".sitedot"])
+    # lifetime number, top-3 bars, shipped count, shipped bullets, and the three bar fills (token, top language, streak)
+    assert sorted(r.strip() for r in cyan_rules) == sorted([".num.hot", ".bar.hot", ".bignum", ".sitedot", ".fill.hot"])
 
 
 def test_only_the_lifetime_number_is_cyan_and_the_stack_has_no_accent(tmp_path):
     svg = draw(tmp_path)
     nums = re.findall(r'<text [^>]*class="(num(?: hot)?)"[^>]*>([^<]+)</text>', svg)
     assert nums == [("num hot", "9,355"), ("num", "18"), ("num", "53")]
-    assert svg.count('class="fill hot"') == 0 and svg.count('class="fill top"') >= 3  # streak, token and top language bars
+    assert svg.count('class="fill hot"') == 3 and svg.count('class="fill top"') == 0  # streak, top language, token bars
     stack = json.loads((FIX / "stack.json").read_text())
     assert not any("core" in item for item in stack) and "core" not in svg
     assert "billion tokens" not in svg and 'class="approx"' not in svg
     assert len(re.findall(r'class="icon"', svg)) == 22 and 'class="pill"' in svg
 
 
-def test_numbers_use_nunito_and_letters_use_young_serif(tmp_path):
+NUMERIC = {"num", "num hot", "bignum", "bigtok", "nlab", "peaklbl"}
+
+
+def test_every_number_is_archivo_and_letters_use_young_serif_and_figtree(tmp_path):
     svg = draw(tmp_path)
     css = svg[svg.index("<style>"):svg.index("</style>")]
-    assert re.search(r"\.name\{font:400 100px 'Young Serif'", css)
-    assert re.search(r"\.bigtok\{font:700 96px Nunito", css) and re.search(r"\.num\{font:700 40px Nunito", css)
-    assert re.search(r"\.nlab\{font:600 12\.5px Nunito", css)
-    assert re.search(r"\.lab\{font:500 12\.5px Figtree", css) and "'DM Mono'" in css
+    assert re.search(r"\.name\{font:400 100px 'Young Serif'", css) and re.search(r"\.title\{font:400 13px 'Young Serif'", css)
+    for cls, rule in ((".bigtok", "700 96px"), (".bignum", "700 76px"), (".num", "700 40px"), (".nlab", "600 12.5px"), (".peaklbl", "600 11.5px")):
+        assert re.search(re.escape(cls) + r"\{font:" + re.escape(rule) + r" Archivo", css), cls
+    assert re.search(r"\.nn\{font-family:Archivo", css) and re.search(r"\.lab\{font:500 12\.5px Figtree", css)
+    fams = set(re.findall(r"@font-face\{font-family:'([^']+)'", css))
+    assert fams == {"Young Serif", "Archivo", "Figtree"}
+    assert "Nunito" not in svg and "DM Mono" not in svg and "Token" not in svg
+    # structural: a digit sits in an Archivo class or in an inline `nn` span, never in plain Figtree or Young Serif text
+    for el in ET.fromstring(svg).iter("{http://www.w3.org/2000/svg}text"):
+        cls = el.get("class")
+        if cls in NUMERIC:
+            continue
+        assert not re.search(r"\d", el.text or ""), (cls, el.text)
+        for span in el:
+            assert span.get("class") == "nn", (cls, span.text)
+            assert not re.search(r"\d", span.tail or ""), (cls, span.tail)
+
+
+def label_texts(svg):
+    return [("".join(e.itertext())) for e in ET.fromstring(svg).iter("{http://www.w3.org/2000/svg}text") if e.get("class") == "sub"]
+
+
+def test_label_styles(tmp_path):
+    assert card.LABEL_STYLE == "a" and card.LABEL_STYLE in card.LABEL_STYLES
+    d = card.gather(str(FIX))
+    a, b, c = (label_texts(card.build(d, k)) for k in ("a", "b", "c"))
+    assert "23 TOOLS" in a and "1,231 IN THE LAST 31 DAYS" in a and "ALL TIME" in a and "BY BYTES" in a and "LIVE SITES" in a
+    assert "SINCE AUG 2026" in a and "GITHUB.COM/LSTUEK" in a and "SEP 10" in a and "TODAY" in a
+    assert "23 tools" in b and "1,231 in the last 31 days" in b and "github.com/lstuek" in b and "live sites" in b
+    assert set(b) - set(c) == {"23 tools", "live sites", "github.com/lstuek", "profile card, updated 2026-10-11 00:29 utc"}
+    assert "23 tools" not in c and "live sites" not in c and "github.com/lstuek" not in c
+    assert "1,231 in the last 31 days" in c and "all time" in c and "since Aug 2026" in c
+    assert card.build(d) == card.build(d, "a") and card.STYLE == "a"  # the default is option a
 
 
 def test_svg_is_self_contained_and_small(tmp_path):
@@ -140,3 +173,11 @@ def test_every_subprocess_hides_its_window():
     calls = len(re.findall(r"subprocess\.(?:run|Popen|call|check_output)\(", src))
     flags = src.count('creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)')
     assert calls >= 1 and calls == flags
+
+
+def test_bars_with_ticks(tmp_path):
+    svg = draw(tmp_path)
+    fills = re.findall(r'<rect [^>]*class="(fill[^"]*)"', svg)
+    assert fills.count("fill hot") == 3 and fills.count("fill") == 5  # 5 other language bars, no ticks on them
+    # ticks: streak 18 of best 53 -> min(53, 20) = 19 cuts, top language 9 cuts, token 20B goal -> 19 cuts
+    assert svg.count('class="tick"') == 19 + 9 + 19
