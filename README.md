@@ -13,28 +13,30 @@
 **🤖 AI Coding This Week**
 
 ```text
-🔤 6.2M input tokens · 45.8K output tokens
-🧠 9 sessions · 72 prompts
+🔤 1.3B input tokens · 4.1M output tokens
+🧠 130 sessions · 485 prompts
 
-Opus          6,279,312 tokens      █████████████████████████  100.0 %
-GPT (Codex)   0 tokens              ░░░░░░░░░░░░░░░░░░░░░░░░░    0.0 %
+Opus          862,022,692 tokens    ████████████████░░░░░░░░░   63.9 %
+Sonnet        446,953,489 tokens    ████████░░░░░░░░░░░░░░░░░   33.1 %
+GPT (Codex)   36,089,391 tokens     █░░░░░░░░░░░░░░░░░░░░░░░░    2.7 %
+Haiku         3,874,597 tokens      ░░░░░░░░░░░░░░░░░░░░░░░░░    0.3 %
 ```
 
 **I'm a Evening builder, most active on Wednesday** <sub>(commits + AI prompts on record)</sub>
 
 ```text
-🌞 Morning     656 events            ██░░░░░░░░░░░░░░░░░░░░░░░    7.2 %
-🌆 Daytime     3,153 events          █████████░░░░░░░░░░░░░░░░   34.8 %
-🌃 Evening     3,478 events          ██████████░░░░░░░░░░░░░░░   38.4 %
-🌙 Night       1,771 events          █████░░░░░░░░░░░░░░░░░░░░   19.6 %
+🌞 Morning     657 events            ██░░░░░░░░░░░░░░░░░░░░░░░    6.4 %
+🌆 Daytime     3,561 events          █████████░░░░░░░░░░░░░░░░   34.7 %
+🌃 Evening     3,938 events          ██████████░░░░░░░░░░░░░░░   38.3 %
+🌙 Night       2,115 events          █████░░░░░░░░░░░░░░░░░░░░   20.6 %
 
-Monday        1,385 events          ████░░░░░░░░░░░░░░░░░░░░░   15.3 %
-Tuesday       968 events            ███░░░░░░░░░░░░░░░░░░░░░░   10.7 %
-Wednesday     1,765 events          █████░░░░░░░░░░░░░░░░░░░░   19.5 %
-Thursday      1,534 events          ████░░░░░░░░░░░░░░░░░░░░░   16.9 %
-Friday        1,598 events          ████░░░░░░░░░░░░░░░░░░░░░   17.6 %
-Saturday      1,373 events          ████░░░░░░░░░░░░░░░░░░░░░   15.2 %
-Sunday        435 events            █░░░░░░░░░░░░░░░░░░░░░░░░    4.8 %
+Monday        1,385 events          ███░░░░░░░░░░░░░░░░░░░░░░   13.5 %
+Tuesday       1,177 events          ███░░░░░░░░░░░░░░░░░░░░░░   11.5 %
+Wednesday     2,197 events          █████░░░░░░░░░░░░░░░░░░░░   21.4 %
+Thursday      1,759 events          ████░░░░░░░░░░░░░░░░░░░░░   17.1 %
+Friday        1,904 events          █████░░░░░░░░░░░░░░░░░░░░   18.5 %
+Saturday      1,393 events          ███░░░░░░░░░░░░░░░░░░░░░░   13.6 %
+Sunday        456 events            █░░░░░░░░░░░░░░░░░░░░░░░░    4.4 %
 ```
 <!--AI:END-->
 
@@ -48,4 +50,4 @@ Sunday        435 events            █░░░░░░░░░░░░░�
   <img src="https://raw.githubusercontent.com/devicons/devicon/master/icons/powershell/powershell-original.svg" height="40" alt="PowerShell" />
 </p>
 
-<p align="center"><!--UPDATED:START--><sub>Last updated 2026-10-09 02:33 Pacific Daylight Time</sub><!--UPDATED:END--></p>
+<p align="center"><!--UPDATED:START--><sub>Last updated 2026-10-10 18:00 Pacific Daylight Time</sub><!--UPDATED:END--></p>
