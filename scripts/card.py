@@ -227,7 +227,7 @@ def ticks(x, y, w, h, steps):
 
 def p_header(d, y, h):
     name = "LINCOLN STUEK"
-    size = min(130, fit("disp", name, 130, W - 2 * PAD - 8, 1))
+    size = min(89, fit("disp", name, 89, W - 2 * PAD - 8, 1))
     cap = FONT_CAP[FILES["disp"]] / 1000
     return t(PAD, y + h / 2 + cap * size / 2, name, "name", size=size)
 
@@ -284,8 +284,8 @@ def p_contrib(d, y, h, w):
     aw = w - 2 * PAD
     pitch = aw / 31
     bw = pitch * 0.68
-    base = y + h - 46
-    top = y + 66
+    base = y + h - 40
+    top = y + 56
     mx = max(v for _, v in bars) or 1
     order = sorted(range(len(bars)), key=lambda i: (-bars[i][1], i))  # ties: earliest first
     peak_i = order[0]
@@ -295,12 +295,12 @@ def p_contrib(d, y, h, w):
         bh = 2 if v == 0 else max(3, (base - top) * v / mx)
         bx = x0 + i * pitch + (pitch - bw) / 2
         cls = "bar hot" if i in top3 else ("bar zero" if v == 0 else "bar")
-        out.append(f'<rect x="{bx:.1f}" y="{base - bh:.1f}" width="{bw:.1f}" height="{bh:.1f}" rx="1.5" class="{cls}"><title>{date}: {v}</title></rect>')
+        out.append(f'<rect x="{bx:.1f}" y="{base - bh:.1f}" width="{bw:.1f}" height="{bh:.1f}" rx="1.5" class="{cls}" style="animation-delay:{i * 10}ms"><title>{date}: {v}</title></rect>')
         if i == peak_i:
             out.append(t(bx + bw / 2, base - bh - 7, v, "peaklbl", "middle"))
     s = datetime.date.fromisoformat(bars[0][0])
-    out.append(label(x0, base + 22, f"{MONTHS[s.month - 1]} {s.day}", "axis"))
-    out.append(label(x0 + aw, base + 22, "today", "axis", "end"))
+    out.append(label(x0, base + 21, f"{MONTHS[s.month - 1]} {s.day}", "axis"))
+    out.append(label(x0 + aw, base + 21, "today", "axis", "end"))
     return "".join(out)
 
 
@@ -311,11 +311,11 @@ def p_totals(d, x, y, h, w):
     rows = [(fmt_int(d["lifetime"]), "contributions"),
             (fmt_int(d["cur"]), "day streak, current"),
             (fmt_int(d["best"]), "day streak, best")]
-    ry = y + 82
+    ry = y + 70
     for num, lab in rows:
-        out.append(t(x0, ry, num, "num hot" if lab == "contributions" else "num", size=fit("num", num, 40, 98)))
+        out.append(t(x0, ry, num, "num hot" if lab == "contributions" else "num", size=fit("num", num, 36, 98)))
         out.append(t(x0 + 108, ry - 5, lab, "lab"))
-        ry += 50
+        ry += 42
     by = ry - 12
     tw_ = aw - 62
     frac = min(1, d["cur"] / d["best"]) if d["best"] else 0
@@ -358,6 +358,7 @@ def p_shipped(d, x, y, h, w):
     for i, s in enumerate(sites):
         kind = s["kind"]
         kw = tw("sans5", kind, 12.5)
+        out.append(f'<circle cx="{x0 + 3}" cy="{ry - 4.5}" r="3" class="ring" style="animation-delay:{i * 450}ms"/>')
         out.append(f'<circle cx="{x0 + 3}" cy="{ry - 4.5}" r="3" class="sitedot"/>')
         out.append(t(x0 + 16, ry, clip_text("sans5", s["site"], 13, aw - 16 - kw - 14), "site"))
         out.append(t(x0 + aw, ry, kind, "kind", "end"))
@@ -367,18 +368,26 @@ def p_shipped(d, x, y, h, w):
     return "".join(out)
 
 
+SHINE_W = 90
+SHINE_TRAVEL = [0]  # set by p_tokens: how far the band travels (the fill width plus its own width)
+
+
 def p_tokens(d, y, h):
     tk = d["tokens"]
     total = tk["total"]
-    out = [panel_title(PAD, y + 32, "TOKEN SPEND", f"since {fmt_month(tk['since'])}", "since")]
+    out = [panel_title(PAD, y + 30, "TOKEN SPEND", f"since {fmt_month(tk['since'])}", "since")]
     full = fmt_int(total)
-    size = min(96, fit("num", full, 96, 590))
-    out.append(t(PAD, y + 124, full, "bigtok", size=size))
+    size = min(78, fit("num", full, 78, 590))
+    out.append(t(PAD, y + 96, full, "bigtok", size=size))
     goal = next_round(total / 1e9)
-    bx, bw, by = PAD, W - 2 * PAD - 92, y + 148
+    bx, bw, by = PAD, W - 2 * PAD - 92, y + 116
     out.append(f'<rect x="{bx}" y="{by}" width="{bw}" height="20" rx="10" class="track"/>')
     out.append(f'<rect x="{bx}" y="{by}" width="{max(20, bw * total / (goal * 1e9)):.1f}" height="20" rx="10" class="fill hot"/>')
     out.append(ticks(bx, by, bw, 20, min(goal, 20)))
+    fw = max(20, bw * total / (goal * 1e9))
+    out.append(f'<clipPath id="tokclip"><rect x="{bx}" y="{by}" width="{fw:.1f}" height="20" rx="10"/></clipPath>'
+               f'<g clip-path="url(#tokclip)"><rect class="shine" x="{bx - SHINE_W}" y="{by}" width="{SHINE_W}" height="20" fill="url(#shine)"/></g>')
+    SHINE_TRAVEL[0] = round(fw + SHINE_W, 1)
     out.append(t(W - PAD, by + 15, f"{total / 1e9:.1f}B/{goal}B", "nlab", "end"))
     return "".join(out)
 
@@ -388,7 +397,7 @@ def p_tokens(d, y, h):
 def build(d, label_style=None):
     global STYLE
     STYLE = label_style or LABEL_STYLE
-    strip_h, head_h, contrib_h, lang_h, tok_h = 40, 172, 248, 276, 196
+    strip_h, head_h, contrib_h, lang_h, tok_h = 40, 146, 211, 276, 164
     y = 0
     body = []
     upd = datetime.datetime.fromisoformat(d["updated"].replace("Z", "+00:00")).strftime("%Y-%m-%d %H:%M")
@@ -424,7 +433,10 @@ def build(d, label_style=None):
                f"{d['cur']} day streak, {fmt_int(d['tokens']['total'])} tokens, {len(d['shipped'])} live sites shipped.")
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" aria-label="{escape(summary)}">'
             f'<title>{escape(summary)}</title><style>{css()}</style>'
-            f'<defs><clipPath id="card"><rect width="{W}" height="{H}" rx="16"/></clipPath></defs>'
+            f'<defs><linearGradient id="shine" x1="0" x2="1" y1="0" y2="0"><stop offset="0" stop-color="#ffffff" stop-opacity="0"/>'
+            f'<stop offset=".3" stop-color="#ffffff" stop-opacity=".45"/><stop offset=".5" stop-color="#ffffff" stop-opacity=".95"/>'
+            f'<stop offset=".7" stop-color="#ffffff" stop-opacity=".45"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient>'
+            f'<clipPath id="card"><rect width="{W}" height="{H}" rx="16"/></clipPath></defs>'
             f'<g clip-path="url(#card)"><rect width="{W}" height="{H}" class="bg"/>'
             + "".join(lines) + "".join(marks) + "".join(body) +
             f'</g><rect x=".5" y=".5" width="{W - 1}" height="{H - 1}" rx="15.5" class="frame"/></svg>')
@@ -441,8 +453,8 @@ def css():
             f".axis{{stroke:{c['line']};stroke-opacity:.4;stroke-width:1}}.hair{{stroke:{c['line']};stroke-opacity:.12}}"
             f".title{{font:400 13px {DISP};letter-spacing:1.4px;fill:{c['text']}}}.sub{{{SUB_CSS[STYLE]};fill:{c['muted']}}}.nn{{font-family:{NUM};font-weight:600}}"
             f".name{{font:400 100px {DISP};letter-spacing:1px;fill:{c['text']}}}"
-            f".num{{font:700 40px {NUM};fill:{c['text']}}}.num.hot{{fill:{c['cyan']}}}"
-            f".bignum{{font:700 76px {NUM};fill:{c['cyan']}}}.bigtok{{font:700 96px {NUM};fill:{c['text']}}}"
+            f".num{{font:700 36px {NUM};fill:{c['text']}}}.num.hot{{fill:{c['cyan']}}}"
+            f".bignum{{font:700 76px {NUM};fill:{c['cyan']}}}.bigtok{{font:700 78px {NUM};fill:{c['text']}}}"
             f".nlab{{font:600 12.5px {NUM};fill:{c['text']}}}"
             f".lab{{font:500 12.5px {SANS};fill:{c['muted']}}}.row{{font:500 13.5px {SANS};fill:{c['text']}}}"
             f".site{{font:500 13px {SANS};fill:{c['text']}}}.kind{{font:500 12.5px {SANS};fill:{c['muted']}}}.sitedot{{fill:{c['cyan']}}}"
@@ -452,7 +464,28 @@ def css():
             f".icon{{fill:{c['light']}}}.dot{{fill:{c['muted']};opacity:.7}}"
             f".bar{{fill:{c['bar']}}}.bar.hot{{fill:{c['cyan']}}}.bar.zero{{fill:{c['muted']};opacity:.5}}"
             f".track{{fill:{c['line']};fill-opacity:.1}}.fill{{fill:{c['bar']}}}.fill.hot{{fill:{c['cyan']}}}"
-            f".tick{{stroke:{c['bg']};stroke-width:1.5}}")
+            f".tick{{stroke:{c['bg']};stroke-width:1.5}}" + motion_css(c))
+
+
+def motion_css(c):
+    """Slow idle motion. Every animation lives in this block, and the base styles above are the finished card, so a
+    viewer without animation (or with reduced motion) sees the resting card. No script, no random values."""
+    return (
+        # one: bars rise once on load (31 contribution bars, then the three cyan bars grow sideways)
+        "@keyframes rise{from{transform:scaleY(0)}to{transform:scaleY(1)}}"
+        "@keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}"
+        "@keyframes pop{from{opacity:0}to{opacity:1}}"
+        ".bar{transform-box:fill-box;transform-origin:50% 100%;animation:rise .7s cubic-bezier(.2,.7,.2,1) backwards}"
+        ".fill.hot{transform-box:fill-box;transform-origin:0 50%;animation:grow 1s cubic-bezier(.2,.7,.2,1) .15s backwards}"
+        ".peaklbl{animation:pop .4s ease-out .8s backwards}"
+        # two: a soft band of light crosses the token fill, then rests (3.6 s cycle)
+        f"@keyframes shine{{0%{{transform:translateX(0)}}55%,100%{{transform:translateX({SHINE_TRAVEL[0]}px)}}}}"
+        ".shine{animation:shine 3.6s ease-in-out 1.3s infinite}"
+        # three: a ring grows and fades around each shipped dot, one after another (3.6 s cycle)
+        "@keyframes ring{0%{transform:scale(1);opacity:0}8%{opacity:.7}55%,100%{transform:scale(3.4);opacity:0}}"
+        f".ring{{fill:{c['cyan']};fill-opacity:.2;stroke:{c['cyan']};stroke-width:1.2;vector-effect:non-scaling-stroke;opacity:0;"
+        "transform-box:fill-box;transform-origin:50% 50%;animation:ring 3.6s ease-out infinite}"
+        "@media (prefers-reduced-motion:reduce){.bar,.fill.hot,.peaklbl,.shine,.ring{animation:none!important}}")
 
 
 def main(argv=None):
