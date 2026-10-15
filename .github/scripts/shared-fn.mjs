@@ -91,7 +91,9 @@ function graph(files, ts) {
     if (json.error) throw Error(`Invalid config: ${f}`);
     // parseJsonConfigFileContent reads extends and paths through the data-only host.
     const parsed = ts.parseJsonConfigFileContent(json.config, configHost, path.posix.dirname(f), {}, f);
-    const errors = parsed.errors.filter(e => e.code !== 18003 && e.code !== 18002);
+    // Missing extends targets cannot be installed or read outside this snapshot.
+    // Retain local options; malformed JSON/options and config cycles still fail.
+    const errors = parsed.errors.filter(e => e.code !== 18003 && e.code !== 18002 && e.code !== 5083 && e.code !== 6053);
     if (errors.length) throw Error(ts.flattenDiagnosticMessageText(errors[0].messageText, '\n'));
     configs.set(path.posix.dirname(f), {...defaults, ...parsed.options, allowJs: true, noLib: true, types: []});
   }
@@ -147,7 +149,7 @@ function graph(files, ts) {
         if (target) return target;
       }
     }
-    const d = s.declarations?.find(d => ts.isFunctionDeclaration(d) ||
+    const d = s.declarations?.find(d => ts.isFunctionDeclaration(d) && d.body) || s.declarations?.find(d => ts.isFunctionDeclaration(d) ||
       ((ts.isVariableDeclaration(d) || ts.isPropertyAssignment(d) || ts.isPropertyAccessExpression(d) || ts.isBinaryExpression(d)) &&
         checker.getTypeAtLocation(d).getCallSignatures().length));
     // Include the RHS body of exports.f = function/arrow when comparing changes.

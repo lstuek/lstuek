@@ -17,17 +17,15 @@ on:
         required: true
         type: string
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-
 concurrency:
   group: pr-review-${{ github.event.pull_request.number || inputs.pr }}
   cancel-in-progress: false
 
 jobs:
   review:
+    permissions:
+      contents: read
+      pull-requests: write # PR-Agent posts issue comments on PRs; this scope permits them.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -170,6 +168,10 @@ jobs:
 
   detect:
     # No needs: a PR-Agent failure must never suppress shared-function detection.
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -258,6 +260,7 @@ jobs:
           # Codex ignores requests from github-actions[bot]; the request is posted as Lincoln
           # with a fine-grained token (Pull requests: write on his repos only).
           CODEX_TRIGGER_TOKEN: ${{ secrets.CODEX_TRIGGER_TOKEN }}
+          REPO_OWNER: ${{ github.repository_owner }}
         shell: bash
         run: |
           python3 - <<'PY'
@@ -275,15 +278,22 @@ jobs:
               api(f'repos/{repo}/issues/{s["pr"]}/labels', 'POST', dict(labels=[label]))
               s['label_added'] = True; p.write_text(json.dumps(s))
               pages = json.loads(subprocess.check_output(['gh', 'api', '--paginate', '--slurp', f'repos/{repo}/issues/{s["pr"]}/comments?per_page=100']))
-              already = any((c.get('body') or '').strip() == '@codex review' for page in pages for c in page)
-              if os.environ['CODEX_MODE'] == 'trigger' and not already:
+              if os.environ['CODEX_MODE'] == 'trigger':
                   if not os.environ.get('CODEX_TRIGGER_TOKEN'):
                       s['error'] = 'CODEX_TRIGGER_TOKEN secret missing; Codex was not requested'; p.write_text(json.dumps(s))
                       raise SystemExit(s['error'])
-                  subprocess.run(['gh', 'api', '--method', 'POST', f'repos/{repo}/issues/{s["pr"]}/comments', '--input', '-'],
-                                 input=json.dumps(dict(body='@codex review')).encode(), capture_output=True, check=True,
-                                 env={**os.environ, 'GH_TOKEN': os.environ['CODEX_TRIGGER_TOKEN']})
-                  s['codex_comment'] = True
+                  trigger_env = {**os.environ, 'GH_TOKEN': os.environ['CODEX_TRIGGER_TOKEN']}
+                  try:
+                      trigger_login = subprocess.check_output(['gh', 'api', 'user', '--jq', '.login'], env=trigger_env, text=True).strip()
+                  except (subprocess.CalledProcessError, OSError):
+                      trigger_login = ''
+                  trigger_login = trigger_login or os.environ['REPO_OWNER']
+                  already = any(c['user']['login'].casefold() == trigger_login.casefold() and (c.get('body') or '').strip() == '@codex review' for page in pages for c in page)
+                  if not already:
+                      subprocess.run(['gh', 'api', '--method', 'POST', f'repos/{repo}/issues/{s["pr"]}/comments', '--input', '-'],
+                                     input=json.dumps(dict(body='@codex review')).encode(), capture_output=True, check=True,
+                                     env=trigger_env)
+                      s['codex_comment'] = True
           p.write_text(json.dumps(s))
           PY
 
