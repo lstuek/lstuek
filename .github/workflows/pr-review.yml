@@ -1,0 +1,305 @@
+# Advisory only: do not make these jobs required merge checks.
+# Trusted default-branch scripts only; PR objects are never checked out or executed.
+name: PR review
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: PR number for the known-bad smoke test
+        required: true
+        type: number
+      model:
+        description: Model override for the known-bad smoke test
+        default: gpt-6.1-sol
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
+      REVIEW_MODEL: ${{ inputs.model || 'gpt-6.1-sol' }}
+    steps:
+      - name: Read PR and skip ineligible or already reviewed PRs
+        id: pr
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          def api(route):
+              return json.loads(subprocess.check_output(['gh', 'api', route]))
+          n = os.environ['PR_NUMBER']
+          if not re.fullmatch(r'[1-9][0-9]*', n):
+              raise SystemExit('PR number must be a positive integer')
+          repo = os.environ['GITHUB_REPOSITORY']
+          pr = api(f'repos/{repo}/pulls/{n}')
+          skip = ('skipped-draft' if pr['draft'] else
+                  'skipped-fork' if (pr['head']['repo'] or {}).get('full_name', '').lower() != repo.lower() else
+                  'skipped-bot' if pr['user']['type'] == 'Bot' else '')
+          comments = []
+          if not skip:
+              pages = json.loads(subprocess.check_output(['gh', 'api', '--paginate', '--slurp', f'repos/{repo}/issues/{n}/comments?per_page=100']))
+              comments = [c for page in pages for c in page]
+              if any(c['user']['login'] == 'github-actions[bot]' and 'PR Reviewer Guide' in (c.get('body') or '') for c in comments):
+                  skip = 'skipped-marker'
+          state = dict(pr=int(n), head_sha=pr['head']['sha'], base_sha=pr['base']['sha'], merge_base=None,
+                       pragent=skip or 'failed', model=os.environ['REVIEW_MODEL'], model_tokens_in=None,
+                       model_tokens_out=None, detector=None, shared_functions=[], label_added=False,
+                       codex_comment=False, status=skip or 'pending', prior_comment_ids=[c['id'] for c in comments])
+          with open(os.path.join(os.environ['RUNNER_TEMP'], 'review-summary.json'), 'w') as f: json.dump(state, f)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'run={str(not skip).lower()}\npr={n}\nhead={pr["head"]["sha"]}\nbase={pr["base"]["sha"]}\n')
+          if skip:
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f: f.write(f'PR #{n}: {skip}\n')
+          PY
+
+      - name: Check out default branch only
+        if: steps.pr.outputs.run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch PR objects without checkout
+        if: steps.pr.outputs.run == 'true'
+        env:
+          BASE_SHA: ${{ steps.pr.outputs.base }}
+          HEAD_SHA: ${{ steps.pr.outputs.head }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git fetch --no-tags origin "$BASE_SHA" "+refs/pull/$PR_NUMBER/head:refs/pr-review/head"
+          test "$(git rev-parse refs/pr-review/head)" = "$HEAD_SHA" || { echo 'PR head changed; reopen to retry'; exit 1; }
+          git merge-base "$BASE_SHA" "$HEAD_SHA" > "$RUNNER_TEMP/review-merge-base"
+          sha256sum .github/workflows/pr-review.yml .github/scripts/shared-fn.mjs .github/scripts/requirements-pragent.txt
+          python3 - <<'PY'
+          import json, os, pathlib
+          p = pathlib.Path(os.environ['RUNNER_TEMP']) / 'review-summary.json'; s = json.loads(p.read_text())
+          s['merge_base'] = (pathlib.Path(os.environ['RUNNER_TEMP']) / 'review-merge-base').read_text().strip()
+          p.write_text(json.dumps(s))
+          PY
+
+      - name: Set up Python
+        if: steps.pr.outputs.run == 'true'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Install frozen dependencies and pinned PR-Agent
+        if: steps.pr.outputs.run == 'true'
+        shell: bash
+        run: |
+          # giteapy 1.0.8 is sdist-only; its source archive is hash-pinned too.
+          python -m pip install --require-hashes -r .github/scripts/requirements-pragent.txt
+          python -m pip install --no-deps 'git+https://github.com/qodo-ai/pr-agent@330f0813b5fe0d1f54b794077c2d02aa85a1fb63'
+
+      - name: Run PR-Agent
+        if: steps.pr.outputs.run == 'true'
+        working-directory: ${{ runner.temp }}
+        env:
+          GITHUB__DEPLOYMENT_TYPE: user
+          GITHUB__USER_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CONFIG__GIT_PROVIDER: github
+          CONFIG__MODEL: ${{ env.REVIEW_MODEL }}
+          CONFIG__FALLBACK_MODELS: '[]'
+          CONFIG__PUBLISH_OUTPUT: 'true'
+          CONFIG__MAX_MODEL_TOKENS: '32000'
+          CONFIG__VERBOSITY_LEVEL: '2'
+          CONFIG__PROPAGATE_TOOL_ERRORS: 'true'
+          OPENAI__KEY: ${{ secrets.OPENAI_KEY }}
+        shell: bash
+        run: |
+          python -m pr_agent.cli --json-output "$RUNNER_TEMP/pragent.json" --pr_url "https://github.com/$GITHUB_REPOSITORY/pull/$PR_NUMBER" review
+
+      - name: Require a new review comment and write JSON summary
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          p = pathlib.Path(os.environ['RUNNER_TEMP']) / 'review-summary.json'
+          s = json.loads(p.read_text()) if p.exists() else dict(pr=os.environ['PR_NUMBER'], head_sha=None,
+              base_sha=None, merge_base=None, pragent='failed', model=os.environ['REVIEW_MODEL'],
+              model_tokens_in=None, model_tokens_out=None, detector=None, shared_functions=[],
+              label_added=False, codex_comment=False, status='failed', error='PR metadata unavailable')
+          failed = s['status'] == 'failed'
+          if s['status'] == 'pending':
+              try:
+                  pages = json.loads(subprocess.check_output(['gh', 'api', '--paginate', '--slurp', f'repos/{os.environ["GITHUB_REPOSITORY"]}/issues/{s["pr"]}/comments?per_page=100']))
+              except (subprocess.CalledProcessError, ValueError):
+                  pages = []; s['error'] = 'Could not verify the posted review comment'
+              posted = any(c['id'] not in s['prior_comment_ids'] and c['user']['login'] == 'github-actions[bot]' and 'PR Reviewer Guide' in (c.get('body') or '') for page in pages for c in page)
+              s['pragent'] = s['status'] = 'posted' if posted else 'failed'
+              failed = not posted
+              output = pathlib.Path(os.environ['RUNNER_TEMP']) / 'pragent.json'
+              if output.exists():
+                  try:
+                      usage = json.loads(output.read_text()).get('usage', {})
+                      s['model_tokens_in'] = usage.get('prompt_tokens')
+                      s['model_tokens_out'] = usage.get('completion_tokens')
+                  except (ValueError, AttributeError):
+                      s['status'] = s['pragent'] = 'failed'; failed = True
+              elif posted:
+                  s['status'] = s['pragent'] = 'failed'; failed = True
+          if os.environ['JOB_STATUS'] != 'success': s['status'] = 'failed'
+          s.pop('prior_comment_ids', None); p.write_text(json.dumps(s, indent=2))
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f: f.write('```json\n' + json.dumps(s, indent=2) + '\n```\n')
+          if failed: raise SystemExit('No new PR Reviewer Guide comment or structured review output; review failed')
+          PY
+
+  detect:
+    # No needs: a PR-Agent failure must never suppress shared-function detection.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr }}
+      CODEX_MODE: ${{ vars.PR_REVIEW_CODEX_MODE || 'trigger' }}
+    steps:
+      - name: Read PR and skip ineligible PRs
+        id: pr
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          n = os.environ['PR_NUMBER']
+          if not re.fullmatch(r'[1-9][0-9]*', n): raise SystemExit('PR number must be a positive integer')
+          pr = json.loads(subprocess.check_output(['gh', 'api', f'repos/{os.environ["GITHUB_REPOSITORY"]}/pulls/{n}']))
+          skip = ('skipped-draft' if pr['draft'] else
+                  'skipped-fork' if (pr['head']['repo'] or {}).get('full_name', '').lower() != os.environ['GITHUB_REPOSITORY'].lower() else
+                  'skipped-bot' if pr['user']['type'] == 'Bot' else '')
+          s = dict(pr=int(n), head_sha=pr['head']['sha'], base_sha=pr['base']['sha'], merge_base=None,
+                   pragent=None, model_tokens_in=None, model_tokens_out=None, detector=None if skip else 'error',
+                   shared_functions=[], label_added=False, codex_comment=False, status=skip or 'pending')
+          with open(os.path.join(os.environ['RUNNER_TEMP'], 'detect-summary.json'), 'w') as f: json.dump(s, f)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'run={str(not skip).lower()}\nhead={pr["head"]["sha"]}\nbase={pr["base"]["sha"]}\n')
+          if skip:
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f: f.write(f'PR #{n}: {skip}\n')
+          PY
+
+      - name: Check out default branch only
+        if: steps.pr.outputs.run == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        if: steps.pr.outputs.run == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Install detector compiler in temp only
+        if: steps.pr.outputs.run == 'true'
+        shell: bash
+        run: npm install --prefix "$RUNNER_TEMP/compiler" --ignore-scripts --no-audit --no-fund typescript@5.9.3
+
+      - name: Fetch PR objects and detect shared functions
+        if: steps.pr.outputs.run == 'true'
+        env:
+          BASE_SHA: ${{ steps.pr.outputs.base }}
+          HEAD_SHA: ${{ steps.pr.outputs.head }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git fetch --no-tags origin "$BASE_SHA" "+refs/pull/$PR_NUMBER/head:refs/pr-review/head"
+          test "$(git rev-parse refs/pr-review/head)" = "$HEAD_SHA" || { echo 'PR head changed; reopen to retry'; exit 1; }
+          MERGE_BASE=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          export TS_PATH="$RUNNER_TEMP/compiler/node_modules/typescript"
+          sha256sum .github/workflows/pr-review.yml .github/scripts/shared-fn.mjs .github/scripts/requirements-pragent.txt
+          set +e
+          node .github/scripts/shared-fn.mjs "$MERGE_BASE" "$HEAD_SHA" > "$RUNNER_TEMP/detector.json"
+          code=$?
+          set -e
+          export DETECTOR_EXIT="$code"
+          python3 - <<'PY'
+          import json, os, pathlib
+          p = pathlib.Path(os.environ['RUNNER_TEMP']) / 'detect-summary.json'; s = json.loads(p.read_text())
+          try:
+              data = json.loads((pathlib.Path(os.environ['RUNNER_TEMP']) / 'detector.json').read_text())
+              s.update({k: v for k, v in data.items() if k in ('merge_base', 'detector', 'shared_functions', 'error')})
+          except (OSError, ValueError): s.update(detector='error', error='Detector output unavailable')
+          if os.environ['DETECTOR_EXIT'] not in ('0', '1'):
+              s['detector'] = 'error'
+          s['status'] = s['detector']; p.write_text(json.dumps(s))
+          PY
+          if [ "$code" -gt 1 ]; then exit 1; fi
+
+      - name: Label matches and request Codex once
+        if: steps.pr.outputs.run == 'true' && success()
+        env:
+          # Codex ignores requests from github-actions[bot]; the request is posted as Lincoln
+          # with a fine-grained token (Pull requests: write on his repos only).
+          CODEX_TRIGGER_TOKEN: ${{ secrets.CODEX_TRIGGER_TOKEN }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess
+          p = pathlib.Path(os.environ['RUNNER_TEMP']) / 'detect-summary.json'; s = json.loads(p.read_text())
+          def api(route, method='GET', data=None):
+              cmd = ['gh', 'api', '--method', method, route]
+              if data is not None: cmd += ['--input', '-']
+              return subprocess.run(cmd, input=json.dumps(data).encode() if data is not None else None, capture_output=True, check=True)
+          if s['detector'] == 'matched':
+              repo = os.environ['GITHUB_REPOSITORY']; label = 'shared-function'
+              labels = json.loads(subprocess.check_output(['gh', 'api', '--paginate', '--slurp', f'repos/{repo}/labels?per_page=100']))
+              if not any(l['name'] == label for page in labels for l in page):
+                  api(f'repos/{repo}/labels', 'POST', dict(name=label, color='5319e7', description='Changes a function used in at least two other files'))
+              api(f'repos/{repo}/issues/{s["pr"]}/labels', 'POST', dict(labels=[label]))
+              s['label_added'] = True; p.write_text(json.dumps(s))
+              pages = json.loads(subprocess.check_output(['gh', 'api', '--paginate', '--slurp', f'repos/{repo}/issues/{s["pr"]}/comments?per_page=100']))
+              already = any((c.get('body') or '').strip() == '@codex review' for page in pages for c in page)
+              if os.environ['CODEX_MODE'] == 'trigger' and not already:
+                  if not os.environ.get('CODEX_TRIGGER_TOKEN'):
+                      s['error'] = 'CODEX_TRIGGER_TOKEN secret missing; Codex was not requested'; p.write_text(json.dumps(s))
+                      raise SystemExit(s['error'])
+                  subprocess.run(['gh', 'api', '--method', 'POST', f'repos/{repo}/issues/{s["pr"]}/comments', '--input', '-'],
+                                 input=json.dumps(dict(body='@codex review')).encode(), capture_output=True, check=True,
+                                 env={**os.environ, 'GH_TOKEN': os.environ['CODEX_TRIGGER_TOKEN']})
+                  s['codex_comment'] = True
+          p.write_text(json.dumps(s))
+          PY
+
+      - name: Write JSON summary
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          p = pathlib.Path(os.environ['RUNNER_TEMP']) / 'detect-summary.json'
+          s = json.loads(p.read_text()) if p.exists() else dict(pr=os.environ['PR_NUMBER'], head_sha=None,
+              base_sha=None, merge_base=None, pragent=None, model_tokens_in=None, model_tokens_out=None,
+              detector='error', shared_functions=[], label_added=False, codex_comment=False,
+              status='failed', error='PR metadata unavailable')
+          if os.environ['JOB_STATUS'] != 'success': s['status'] = 'failed'
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f: f.write('```json\n' + json.dumps(s, indent=2) + '\n```\n')
+          PY
