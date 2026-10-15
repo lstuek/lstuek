@@ -67,6 +67,21 @@ function unpack(tar) {
 }
 
 function graph(files, ts) {
+  function comparisonKey(node, sf) {
+    const tokens = []; let end = node.getStart(sf);
+    function visit(n) {
+      if (n.kind >= ts.SyntaxKind.FirstJSDocNode && n.kind <= ts.SyntaxKind.LastJSDocNode) return;
+      if (n.kind >= ts.SyntaxKind.FirstToken && n.kind <= ts.SyntaxKind.LastToken) {
+        const start = n.kind === ts.SyntaxKind.JsxText ? n.pos : n.getStart(sf);
+        // Ignore comment-only changes; retain line breaks in trivia for ASI.
+        tokens.push([n.kind, /[\r\n]/.test(sf.text.slice(end, start)),
+          sf.text.slice(start, n.end).replace(/\r\n?/g, '\n')]);
+        end = n.end;
+      } else for (const child of n.getChildren(sf)) visit(child);
+    }
+    visit(node);
+    return JSON.stringify(tokens);
+  }
   const absolute = new Map([...files].map(([f, text]) => [root + '/' + f, text]));
   const norm = p => path.posix.normalize(normal(p));
   const fileExists = p => absolute.has(norm(p));
@@ -168,7 +183,7 @@ function graph(files, ts) {
       if (!files.has(file)) continue;
       const name = d.name?.getText(own) || (ts.isBinaryExpression(d) && d.right.name?.getText(own)) || symbol.name;
       // Stable comparison key; position is used only for linking references in one graph.
-      definitions.set(identity(d), {file, function: name, text: d.getText(own),
+      definitions.set(identity(d), {file, function: name, text: d.getText(own), key: comparisonKey(d, own),
         start: own.getLineAndCharacterOfPosition(d.getStart(own)).line + 1,
         end: own.getLineAndCharacterOfPosition(d.end).line + 1});
     }
@@ -215,10 +230,10 @@ async function detect(baseRef, headRef) {
   const a = graph(before.files, ts), b = graph(after.files, ts), result = [];
   for (const key of new Set([...a.keys(), ...b.keys()])) {
     const old = a.get(key), next = b.get(key);
-    if (old?.text === next?.text) continue;
+    if (old?.key === next?.key) continue;
     const def = (old?.callers.length || 0) >= (next?.callers.length || 0) ? old : next;
     if (!def || def.callers.length < 2) continue;
-    const {text, ...entry} = def;
+    const {text, key: comparison, ...entry} = def;
     result.push({...entry, change: !old ? 'added-or-renamed' : !next ? 'deleted-or-renamed' : 'changed'});
   }
   return {base_sha: base, head_sha: head, merge_base: mergeBase,
