@@ -170,7 +170,7 @@ jobs:
     # No needs: a PR-Agent failure must never suppress shared-function detection.
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write # adding a label to a PR fails with read (sandbox#46, 2026-10-15)
       issues: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
