@@ -166,8 +166,8 @@ def test_city_data_landmarks_totals_and_one_locked_number():
                     "last_push_date": at(20, hour=23).astimezone().date().isoformat(), "language": None}},
         "locked": {"activity_30d": 3}}
     u.validate_upload("data/city.json", value, list(history()))
-    renamed = u.city_data(history(), {}, {}, {**MAP, "ka-ops": "org/renamed-away"}, 0, NOW)
-    assert "ka-ops" not in renamed["landmarks"]
+    with pytest.raises(SystemExit, match="landmark map: ka-ops"):
+        u.city_data(history(), {}, {}, {**MAP, "ka-ops": "org/renamed-away"}, 0, NOW)
 
 
 def test_missing_landmark_map_means_no_landmarks(tmp_path, monkeypatch):
@@ -256,4 +256,20 @@ def test_failed_or_partial_request_keeps_previous_city_bytes(tmp_path, monkeypat
     before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
     with pytest.raises(SystemExit, match="fetch failed"):
         run_main(tmp_path, monkeypatch, fail)
+    assert {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before
+
+
+def test_failed_language_request_keeps_previous_city_bytes(tmp_path, monkeypatch):
+    (tmp_path / "README.md").write_text("<!--AI:START--><!--AI:END--><!--UPDATED:START--><!--UPDATED:END-->")
+    (tmp_path / "landmarks.json").write_text(json.dumps({"portfolio": "lstuek/fake-site"}))
+    run_main(tmp_path, monkeypatch)
+    before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    ok = fake_gh()
+    def run(args, **kw):
+        if "/languages" in " ".join(args):
+            return completed("", returncode=1, stderr="HTTP 502")
+        return ok(args, **kw)
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(SystemExit, match="fetch failed"):
+        u.main()
     assert {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == before

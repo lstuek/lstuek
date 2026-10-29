@@ -50,11 +50,6 @@ class FetchError(Exception):
     """A failed, rate-limited or partial GitHub request: never read as an empty repo."""
 
 
-def gh_lines(*args):
-    r = subprocess.run(["gh", *args], capture_output=True, text=True, encoding="utf-8", creationflags=NO_WINDOW)
-    return r.stdout.splitlines() if r.returncode == 0 else []  # empty repos return 409
-
-
 def gh_strict(*args):
     """gh output lines; an empty repo (HTTP 409) is no lines, any other failure raises FetchError.
     A paginated call that fails on a later page exits non-zero, so partial output is a failure too."""
@@ -106,12 +101,13 @@ def city_data(history, languages, snapshots, landmarks, tokens, now):
 
     marks = {}
     for key, repo in sorted(landmarks.items()):
-        if repo in history:
-            times = history[repo]
-            last = max(times).date() if times else None
-            marks[key] = {"commits_total": len(times), "commits_30d": recent(times, 30),
-                          "pushed_this_week": recent(times, 7) > 0,
-                          "last_push_date": last and last.isoformat(), "language": top(snapshots.get(repo, {}))}
+        if repo not in history:
+            sys.exit(f"landmark map: {key} maps to a repo outside the repo list")
+        times = history[repo]
+        last = max(times).date() if times else None
+        marks[key] = {"commits_total": len(times), "commits_30d": recent(times, 30),
+                      "pushed_this_week": recent(times, 7) > 0,
+                      "last_push_date": last and last.isoformat(), "language": top(snapshots.get(repo, {}))}
     mapped = set(landmarks.values())
     return {"generated_at": now.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "totals": {"tokens": tokens, "commits": sum(map(len, history.values())), "top_language": top(languages)},
@@ -125,7 +121,7 @@ def language_bytes(names, dry_run=False, return_snapshots=False):
     snapshots = load_json(path)
     total = collections.Counter()
     for n in names:
-        lines = gh_lines("api", f"repos/{n}/languages")
+        lines = gh_strict("api", f"repos/{n}/languages")
         if lines:
             langs = json.loads("\n".join(lines))
             if not isinstance(langs, dict) or any(not count(v) for v in langs.values()):
@@ -555,6 +551,7 @@ def main():
     try:
         names = repos()
         history = commit_history(names)
+        languages, snapshots = language_bytes(names, dry_run=True, return_snapshots=True)
     except FetchError as error:
         sys.exit(f"fetch failed, nothing written: {error}")
     if not names:
@@ -570,7 +567,6 @@ def main():
     stored = {p: load_json(p) for p in sorted(glob.glob(os.path.join(data_dir, "ai-*.json")))}
     ledgers, everyone, uncertain = rebuild_ledgers(stored, scan_logs(), mine_path)
     print(f"uncertain: {uncertain}", flush=True)
-    languages, snapshots = language_bytes(names, dry_run=True, return_snapshots=True)
     pc = pc_data(everyone, languages, per_day, now)
     validate_upload("data/pc.json", pc, names)
     city = city_data(history, languages, snapshots, load_landmarks(), pc["tokens"]["total"], now)
