@@ -166,6 +166,8 @@ def test_city_data_landmarks_totals_and_one_locked_number():
                     "last_push_date": at(20, hour=23).astimezone().date().isoformat(), "language": None}},
         "locked": {"activity_30d": 3}}
     u.validate_upload("data/city.json", value, list(history()))
+    renamed = u.city_data(history(), {}, {}, {**MAP, "ka-ops": "org/renamed-away"}, 0, NOW)
+    assert "ka-ops" not in renamed["landmarks"]
 
 
 def test_missing_landmark_map_means_no_landmarks(tmp_path, monkeypatch):

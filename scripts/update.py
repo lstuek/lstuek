@@ -27,7 +27,7 @@ HOME = os.path.expanduser("~")
 MIN_GAP_HOURS = 5  # scheduled runs closer together than this are skipped
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # pythonw has no console, so each child would open one
 UPLOAD_CONTRIBUTIONS = False
-CITY_REPO = "lstuek.github.io"  # the city page itself; excluded from every count
+CITY_REPO = "lstuek.github.io"
 LANDMARK_KEYS = {"portfolio", "new-era", "bionic-wave", "ka-tech", "ka-ops", "aios", "crm", "systemselect"}
 LANDMARK_FIELDS = {"commits_total", "commits_30d", "pushed_this_week", "last_push_date", "language"}
 
@@ -106,7 +106,7 @@ def city_data(history, languages, snapshots, landmarks, tokens, now):
 
     marks = {}
     for key, repo in sorted(landmarks.items()):
-        if repo in history:  # a renamed or excluded repo drops out instead of counting as zero
+        if repo in history:
             times = history[repo]
             last = max(times).date() if times else None
             marks[key] = {"commits_total": len(times), "commits_30d": recent(times, 30),
@@ -252,7 +252,7 @@ def summarize(sessions, since):
                     tin, tout = tin + i, tout + o
                     models[fam] += i + o
         recent = 0
-        for hour, n in s["prompts"].items():  # per hour from local logs, per day from uploaded ledgers
+        for hour, n in s["prompts"].items():
             times += [dt.datetime.strptime(hour, "%Y-%m-%dT%H" if len(hour) > 10 else "%Y-%m-%d")] * n
             recent += n if hour[:10] >= since else 0
         prompts, active = prompts + recent, active + (recent > 0)
@@ -437,7 +437,6 @@ def validate_upload(path, value, names):
                 require(count(entry["commits_total"]) and count(entry["commits_30d"]))
                 require(type(entry["pushed_this_week"]) is bool and language(entry["language"]))
                 require(entry["last_push_date"] is None or day(entry["last_push_date"]))
-            # The landmark keys are the only names allowed out, and only in key position.
             text = json.dumps({**value, "landmarks": list(landmarks.values())})
         elif path == "data/pc.json":
             require(set(value) in ({"updated", "tokens", "languages"}, {"updated", "tokens", "languages", "contributions"}))
@@ -461,7 +460,7 @@ def validate_upload(path, value, names):
                 require(isinstance(session, str) and re.fullmatch(r"[0-9a-f]{12}", session))
                 require(isinstance(record, dict) and set(record) == {"prompts", "usage"})
                 require(isinstance(record["prompts"], dict) and isinstance(record["usage"], dict))
-                for date, n in record["prompts"].items():  # per day: the hour of a prompt stays on the PC
+                for date, n in record["prompts"].items():
                     require(day(date) and count(n))
                 for date, families in record["usage"].items():
                     require(day(date) and isinstance(families, dict))
@@ -553,7 +552,7 @@ def main():
 
     now = dt.datetime.now().astimezone()
     today = now.date()
-    try:  # a failed or partial request writes nothing: the previous city data and its generated_at stay
+    try:
         names = repos()
         history = commit_history(names)
     except FetchError as error:
