@@ -82,7 +82,7 @@ def test_lifetime_since_and_empty():
 def test_language_bytes_and_failed_repo_snapshot(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
     replies = {"repos/owner/big/languages": ['{"Python":1000}'], "repos/owner/small/languages": ['{"TypeScript":10}']}
-    monkeypatch.setattr(u, "gh_lines", lambda *args: replies[args[-1]])
+    monkeypatch.setattr(u, "gh_strict", lambda *args: replies[args[-1]])
     shares = dict(u.language_shares(["owner/big", "owner/small"]))
     assert [round(100 * shares[k], 1) for k in ("Python", "TypeScript")] == [99.0, 1.0]
     replies["repos/owner/big/languages"] = []
@@ -241,8 +241,8 @@ def test_main_dry_run_writes_nothing_and_prints_uncertain(tmp_path, monkeypatch,
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "state"))
     monkeypatch.setattr(sys, "argv", ["update.py", "--dry-run", "--push"])
     monkeypatch.setattr(u, "repos", lambda: ["owner/private-project"])
-    monkeypatch.setattr(u, "commit_times", lambda names: [])
-    monkeypatch.setattr(u, "gh_lines", lambda *args: ['{"Python":1000}'])
+    monkeypatch.setattr(u, "commit_history", lambda names: {})
+    monkeypatch.setattr(u, "gh_strict", lambda *args: ['{"Python":1000}'])
     monkeypatch.setattr(u, "scan_logs", lambda: {})
     data = tmp_path / "data"
     data.mkdir()
@@ -263,7 +263,7 @@ def test_all_subprocess_entry_points_hide_windows(monkeypatch):
         assert kwargs["creationflags"] == u.NO_WINDOW
         return subprocess.CompletedProcess(args[0], 0, stdout="{}", stderr="")
     monkeypatch.setattr(subprocess, "run", run)
-    u.gh_lines("api", "example")
+    u.gh_strict("api", "example")
     u.git("status")
     u.git_text("status")
     assert len(calls) == 3

@@ -3,4 +3,5 @@
 
 - [ref/](ref/index.md) — PRD: profile card, slice 1
 - [scripts/](scripts/) — tooling
-- media: [assets/](assets/) — 4 images — media the product ships
+- media: [assets/](assets/) — 5 images — media the product ships
+- media: [tests/](tests/) — 22 images — tests when they do not live inside the code folder
