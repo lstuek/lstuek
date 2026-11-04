@@ -27,6 +27,9 @@ HOME = os.path.expanduser("~")
 MIN_GAP_HOURS = 5  # scheduled runs closer together than this are skipped
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # pythonw has no console, so each child would open one
 UPLOAD_CONTRIBUTIONS = False
+CITY_REPO = "lstuek.github.io"
+LANDMARK_KEYS = {"portfolio", "new-era", "bionic-wave", "ka-tech", "ka-ops", "aios", "crm", "systemselect"}
+LANDMARK_FIELDS = {"commits_total", "commits_30d", "pushed_this_week", "last_push_date", "language"}
 
 
 def state_dir():
@@ -43,27 +46,73 @@ LANG_COLORS = {
 
 # ---------- GitHub (via gh CLI) ----------
 
-def gh_lines(*args):
+class FetchError(Exception):
+    """A failed, rate-limited or partial GitHub request: never read as an empty repo."""
+
+
+def gh_strict(*args):
+    """gh output lines; an empty repo (HTTP 409) is no lines, any other failure raises FetchError.
+    A paginated call that fails on a later page exits non-zero, so partial output is a failure too."""
     r = subprocess.run(["gh", *args], capture_output=True, text=True, encoding="utf-8", creationflags=NO_WINDOW)
-    return r.stdout.splitlines() if r.returncode == 0 else []  # empty repos return 409
+    if r.returncode == 0:
+        return r.stdout.splitlines()
+    if "HTTP 409" in r.stderr:
+        return []
+    raise FetchError(f"gh {args[0]}: {r.stderr.strip()[:200]}")
 
 
-def repos():
-    """Non-fork repos as "owner/name"."""
+def repos(limit=200):
+    """Non-fork repos as "owner/name", without the profile repos and the city page repo."""
     out = []
     for o in OWNERS:
-        data = json.loads("\n".join(gh_lines("repo", "list", o, "--limit", "200", "--json", "name,isFork")) or "[]")
-        out += [f"{o}/{r['name']}" for r in data if not r["isFork"] and r["name"] != o]
+        data = json.loads("\n".join(gh_strict("repo", "list", o, "--limit", str(limit), "--json", "name,isFork")) or "[]")
+        if len(data) >= limit:
+            raise FetchError(f"repo list for {o} hit the {limit} limit")
+        out += [f"{o}/{r['name']}" for r in data if not r["isFork"] and r["name"] not in (o, CITY_REPO)]
     return out
 
 
-def commit_times(names):
-    out = []
-    for n in names:
-        for s in gh_lines("api", "--paginate", f"repos/{n}/commits?per_page=100",
-                          "--jq", '.[] | select(.author.type != "Bot") | .commit.author.date'):
-            out.append(dt.datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone())
-    return out
+def commit_history(names):
+    """{"owner/name": [non-bot commit times on the default branch]}; an empty repo is []."""
+    return {n: [dt.datetime.fromisoformat(s.strip('"').replace("Z", "+00:00")).astimezone()
+                for s in gh_strict("api", "--paginate", f"repos/{n}/commits?per_page=100",
+                                   "--jq", '.[] | select(.author.type != "Bot") | .commit.author.date')]
+            for n in names}
+
+
+def load_landmarks():
+    """The key-to-repo map, local only (landmarks.json is gitignored). No file means no landmarks."""
+    value = load_json(os.path.join(ROOT, "landmarks.json"))
+    if not (isinstance(value, dict) and set(value) <= LANDMARK_KEYS
+            and all(isinstance(v, str) and re.fullmatch(r"[\w.-]+/[\w.-]+", v) for v in value.values())):
+        sys.exit("landmark map invalid: landmarks.json")
+    return value
+
+
+def city_data(history, languages, snapshots, landmarks, tokens, now):
+    """The city page's data: only numbers, dates, languages and the 8 landmark keys."""
+    today = now.astimezone().date()
+
+    def recent(times, days):
+        return sum(t.date() > today - dt.timedelta(days=days) for t in times)
+
+    def top(langs):
+        return max(langs, key=langs.get) if langs else None
+
+    marks = {}
+    for key, repo in sorted(landmarks.items()):
+        if repo not in history:
+            sys.exit(f"landmark map: {key} maps to a repo outside the repo list")
+        times = history[repo]
+        last = max(times).date() if times else None
+        marks[key] = {"commits_total": len(times), "commits_30d": recent(times, 30),
+                      "pushed_this_week": recent(times, 7) > 0,
+                      "last_push_date": last and last.isoformat(), "language": top(snapshots.get(repo, {}))}
+    mapped = set(landmarks.values())
+    return {"generated_at": now.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "totals": {"tokens": tokens, "commits": sum(map(len, history.values())), "top_language": top(languages)},
+            "landmarks": marks,
+            "locked": {"activity_30d": sum(recent(t, 30) for n, t in history.items() if n not in mapped)}}
 
 
 def language_bytes(names, dry_run=False, return_snapshots=False):
@@ -72,7 +121,7 @@ def language_bytes(names, dry_run=False, return_snapshots=False):
     snapshots = load_json(path)
     total = collections.Counter()
     for n in names:
-        lines = gh_lines("api", f"repos/{n}/languages")
+        lines = gh_strict("api", f"repos/{n}/languages")
         if lines:
             langs = json.loads("\n".join(lines))
             if not isinstance(langs, dict) or any(not count(v) for v in langs.values()):
@@ -200,7 +249,7 @@ def summarize(sessions, since):
                     models[fam] += i + o
         recent = 0
         for hour, n in s["prompts"].items():
-            times += [dt.datetime.strptime(hour, "%Y-%m-%dT%H")] * n
+            times += [dt.datetime.strptime(hour, "%Y-%m-%dT%H" if len(hour) > 10 else "%Y-%m-%d")] * n
             recent += n if hour[:10] >= since else 0
         prompts, active = prompts + recent, active + (recent > 0)
     return tin, tout, active, prompts, models, times
@@ -349,6 +398,9 @@ def count(value):
     return type(value) is int and value >= 0
 
 
+LANGUAGE = r"[A-Za-z][A-Za-z0-9+# ._-]{0,79}"
+
+
 def validate_upload(path, value, names):
     """An allowlist, including nested keys: no arbitrary text can leave the PC."""
     def require(ok):
@@ -358,12 +410,33 @@ def validate_upload(path, value, names):
     def day(key):
         return isinstance(key, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", key) and dt.date.fromisoformat(key)
 
+    def utc(stamp):
+        require(isinstance(stamp, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", stamp))
+        dt.datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+
+    def language(name):
+        return name is None or isinstance(name, str) and re.fullmatch(LANGUAGE, name)
+
+    text = json.dumps(value)
     try:
         require(isinstance(value, dict))
-        if path == "data/pc.json":
+        if path == "data/city.json":
+            require(set(value) == {"generated_at", "totals", "landmarks", "locked"})
+            utc(value["generated_at"])
+            totals, landmarks, locked = value["totals"], value["landmarks"], value["locked"]
+            require(isinstance(totals, dict) and set(totals) == {"tokens", "commits", "top_language"})
+            require(count(totals["tokens"]) and count(totals["commits"]) and language(totals["top_language"]))
+            require(isinstance(locked, dict) and set(locked) == {"activity_30d"} and count(locked["activity_30d"]))
+            require(isinstance(landmarks, dict) and set(landmarks) <= LANDMARK_KEYS)
+            for entry in landmarks.values():
+                require(isinstance(entry, dict) and set(entry) == LANDMARK_FIELDS)
+                require(count(entry["commits_total"]) and count(entry["commits_30d"]))
+                require(type(entry["pushed_this_week"]) is bool and language(entry["language"]))
+                require(entry["last_push_date"] is None or day(entry["last_push_date"]))
+            text = json.dumps({**value, "landmarks": list(landmarks.values())})
+        elif path == "data/pc.json":
             require(set(value) in ({"updated", "tokens", "languages"}, {"updated", "tokens", "languages", "contributions"}))
-            require(isinstance(value["updated"], str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", value["updated"]))
-            dt.datetime.fromisoformat(value["updated"].replace("Z", "+00:00"))
+            utc(value["updated"])
             tokens = value["tokens"]
             require(isinstance(tokens, dict) and set(tokens) == {"total", "claude", "codex", "since"})
             require(all(count(tokens[k]) for k in ("total", "claude", "codex")))
@@ -373,7 +446,7 @@ def validate_upload(path, value, names):
             if since is not None:
                 dt.date.fromisoformat(since + "-01")
             require(isinstance(value["languages"], dict))
-            require(all(isinstance(k, str) and re.fullmatch(r"[A-Za-z][A-Za-z0-9+# ._-]{0,79}", k) and count(v) for k, v in value["languages"].items()))
+            require(all(isinstance(k, str) and re.fullmatch(LANGUAGE, k) and count(v) for k, v in value["languages"].items()))
             if "contributions" in value:
                 require(isinstance(value["contributions"], dict))
                 require(all(day(k) and count(v) for k, v in value["contributions"].items()))
@@ -383,9 +456,8 @@ def validate_upload(path, value, names):
                 require(isinstance(session, str) and re.fullmatch(r"[0-9a-f]{12}", session))
                 require(isinstance(record, dict) and set(record) == {"prompts", "usage"})
                 require(isinstance(record["prompts"], dict) and isinstance(record["usage"], dict))
-                for hour, n in record["prompts"].items():
-                    require(isinstance(hour, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}", hour) and count(n))
-                    dt.datetime.strptime(hour, "%Y-%m-%dT%H")
+                for date, n in record["prompts"].items():
+                    require(day(date) and count(n))
                 for date, families in record["usage"].items():
                     require(day(date) and isinstance(families, dict))
                     for fam, pair in families.items():
@@ -393,15 +465,26 @@ def validate_upload(path, value, names):
                         require(isinstance(pair, list) and len(pair) == 2 and all(count(n) for n in pair))
     except (ValueError, TypeError, KeyError):
         sys.exit(f"privacy schema failed: {path}")
-    check_private([json.dumps(value)], names)
+    check_private([text], names)
+
+
+def daily(record):
+    """The uploaded form of a session: prompt counts per day, not per hour. Tokens are already per day."""
+    prompts = collections.Counter()
+    for key, n in record["prompts"].items():
+        prompts[key[:10]] += n
+    return {"usage": record["usage"], "prompts": dict(prompts)}
 
 
 def rebuild_ledgers(stored, rebuilt, mine_path):
+    """Uploaded ledgers carry per-day prompts (old per-hour files migrate here); `everyone` keeps
+    the per-hour detail of sessions whose logs are still on this PC."""
     ledgers = {path: {**records, **{k: v for k, v in rebuilt.items() if k in records}}
                for path, records in stored.items()}
     ledgers[mine_path] = {**ledgers.get(mine_path, {}), **rebuilt}
     everyone = merge(*ledgers.values())
     uncertain = sum(weight(v) - sum(v["prompts"].values()) for k, v in everyone.items() if k not in rebuilt)
+    ledgers = {path: {k: daily(v) for k, v in records.items()} for path, records in ledgers.items()}
     return ledgers, everyone, uncertain
 
 
@@ -428,7 +511,7 @@ def validate_staged(names, legacy=False):
     for path in filter(None, paths):
         if legacy and path in LEGACY_PATHS:
             check_private([git_text("show", f":{path}")], names)
-        elif path == "data/pc.json" or re.fullmatch(r"data/ai-[0-9a-f]+\.json", path):
+        elif path in ("data/pc.json", "data/city.json") or re.fullmatch(r"data/ai-[0-9a-f]+\.json", path):
             try:
                 value = json.loads(git_text("show", f":{path}"))
             except (ValueError, RuntimeError):
@@ -465,10 +548,15 @@ def main():
 
     now = dt.datetime.now().astimezone()
     today = now.date()
-    names = repos()
+    try:
+        names = repos()
+        history = commit_history(names)
+        languages, snapshots = language_bytes(names, dry_run=True, return_snapshots=True)
+    except FetchError as error:
+        sys.exit(f"fetch failed, nothing written: {error}")
     if not names:
         sys.exit("no repos returned; is `gh` logged in?")  # never overwrite the profile with empty stats
-    commits = commit_times(names)
+    commits = [t for times in history.values() for t in times]
     per_day = collections.Counter(t.date() for t in commits)
     last90 = [(today - dt.timedelta(days=89 - i), per_day[today - dt.timedelta(days=89 - i)]) for i in range(90)]
     cur, longest = streaks(per_day, today)
@@ -479,9 +567,10 @@ def main():
     stored = {p: load_json(p) for p in sorted(glob.glob(os.path.join(data_dir, "ai-*.json")))}
     ledgers, everyone, uncertain = rebuild_ledgers(stored, scan_logs(), mine_path)
     print(f"uncertain: {uncertain}", flush=True)
-    languages, snapshots = language_bytes(names, dry_run=True, return_snapshots=True)
     pc = pc_data(everyone, languages, per_day, now)
     validate_upload("data/pc.json", pc, names)
+    city = city_data(history, languages, snapshots, load_landmarks(), pc["tokens"]["total"], now)
+    validate_upload("data/city.json", city, names)
     for path, records in ledgers.items():
         validate_upload("data/" + os.path.basename(path), records, names)
     if dry_run:
@@ -493,6 +582,7 @@ def main():
     for path, records in ledgers.items():
         write_json(path, records)
     write_json(os.path.join(data_dir, "pc.json"), pc)
+    write_json(os.path.join(data_dir, "city.json"), city)
     os.makedirs(state_dir(), exist_ok=True)
     write_json(os.path.join(state_dir(), "languages.json"), snapshots)
     tin, tout, sess, prompts, models, ptimes = summarize(everyone, (today - dt.timedelta(days=6)).isoformat())
@@ -520,7 +610,7 @@ def main():
           f"AI {sess} sessions {prompts} prompts ({len(everyone)} sessions on record)", flush=True)
 
     if push:
-        paths = ["data/pc.json", *["data/" + os.path.basename(p) for p in ledgers]]
+        paths = ["data/pc.json", "data/city.json", *["data/" + os.path.basename(p) for p in ledgers]]
         if not upload:
             paths += sorted(LEGACY_PATHS)
         if git("add", "--", *paths, out=log):
