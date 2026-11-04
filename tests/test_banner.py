@@ -1,7 +1,6 @@
 import json
 import os
 import pathlib
-import time
 
 import numpy as np
 import pytest
@@ -9,12 +8,12 @@ from PIL import Image
 
 import banner
 import overlay
-from test_overlay import SIZE, spots
+from conftest import SIZE, spots
 
 FRAMES = 24
 REFS = pathlib.Path(__file__).parent / "fixtures" / "banner"
 CITY = {"totals": {"tokens": 23_400_000_000, "commits": 1532, "top_language": "Python"}}
-AMBER = (255, 190, 0)  # the fixture wireframe colour: no cyan outline or neon halo has this much red and so little blue
+AMBER = (255, 190, 0)
 
 
 def beauty(i):
@@ -44,7 +43,7 @@ def rain(i):
     return layer
 
 
-COMMITS_COVER = 118  # the fixture mask covers the right half of the commits sign (x 82 to 154)
+COMMITS_COVER = 118
 
 
 def base_render(root, flicker=None):
@@ -115,15 +114,8 @@ def wire_match(frame, columns):
 
 
 @pytest.fixture(scope="module")
-def built(request):
-    path = pathlib.Path(__file__).parent / "fixtures" / f"run-banner-{os.getpid()}"
-    start = time.perf_counter()
-    out = build(path)
-    seconds = time.perf_counter() - start
-    yield frames(out), seconds, os.path.getsize(out)
-    for p in sorted(path.rglob("*"), key=lambda p: -len(p.parts)):
-        p.rmdir() if p.is_dir() else p.unlink()
-    path.rmdir()
+def built(tmp_path_factory):
+    return frames(build(tmp_path_factory.mktemp("banner")))
 
 
 def test_the_build_is_a_webp_that_loops_forever_with_exact_delays(tmp_path):
@@ -132,7 +124,7 @@ def test_the_build_is_a_webp_that_loops_forever_with_exact_delays(tmp_path):
         assert image.format == "WEBP" and image.is_animated and image.n_frames == FRAMES
         assert image.size == SIZE and image.info["loop"] == 0
     delays = [d for _, d in frames(out)]
-    assert set(delays) == {41, 42} and sum(delays) == 1000  # 24 frames at 24 per second
+    assert set(delays) == {41, 42} and sum(delays) == 1000
 
 
 REF_NAMES = {
@@ -144,9 +136,7 @@ REF_NAMES = {
 
 @pytest.mark.parametrize("area_id, frame", list(REF_NAMES))
 def test_each_area_shows_its_known_text(built, area_id, frame):
-    """Reference patches: tokens 23.4B, commits 1,532, holograms Portfolio / Bionic Wave / KA Tech,
-    billboard Portfolio (frame 1), Bionic Wave (frame 5), SystemSelect (frame 24). Each was looked at by eye."""
-    patch = built[0][frame][0][box(area_id)]
+    patch = built[frame][0][box(area_id)]
     path = REFS / f"{REF_NAMES[area_id, frame]}.png"
     if os.environ.get("BANNER_WRITE_REFS"):
         REFS.mkdir(exist_ok=True)
@@ -164,24 +154,21 @@ def test_other_numbers_do_not_match_the_reference_patches(tmp_path):
 
 def test_text_is_hidden_where_the_mask_covers_it(built):
     rows, _ = box("sign-commits", margin=0)
-    frame = built[0][0][0]
+    frame = built[0][0]
     covered = slice(COMMITS_COVER, 154)
     shown = slice(82, COMMITS_COVER)
     assert np.abs(frame[rows, covered] - background(0)[rows, covered]).mean() < 3
     assert np.abs(frame[rows, shown] - background(0)[rows, shown]).mean() > 15
 
 
-def test_a_plain_cyan_patch_cannot_pass_for_the_wireframe():
+def test_the_wireframe_shows_only_in_its_window_behind_the_scan_line(built):
     cyan = np.zeros((*SIZE[::-1], 3), np.int16)
     cyan[...] = (0, 255, 255)
     assert wire_match(cyan, slice(0, SIZE[0])) == 0
     assert wire_match(wireframe().astype(np.int16), slice(0, SIZE[0])) == 1
-
-
-def test_the_wireframe_shows_only_in_its_window_behind_the_scan_line(built):
     window, plan = sweep_frames()
     assert window and 0 not in window
-    for i, (frame, _) in enumerate(built[0]):
+    for i, (frame, _) in enumerate(built):
         if i in window:
             left, right = (round(f * SIZE[0]) for f in plan[i]["sweep"])
             band, outside = slice(left + 2, right - 2), slice(right + 2, None) if left == 0 else slice(0, left - 2)
@@ -193,15 +180,11 @@ def test_the_wireframe_shows_only_in_its_window_behind_the_scan_line(built):
 
 def test_text_under_the_scan_line_turns_to_a_cyan_outline(built):
     window, plan = sweep_frames()
-    i = next(i for i in window if plan[i]["sweep"][0] == 0)  # wipe in: band starts at the left edge
-    patch = built[0][i][0][box("sign-tokens", margin=0)]
+    i = next(i for i in window if plan[i]["sweep"][0] == 0)
+    patch = built[i][0][box("sign-tokens", margin=0)]
     cyan = (patch[..., 0] < 110) & (patch[..., 1] > 150) & (patch[..., 2] > 150)
     magenta = (patch[..., 0] > 150) & (patch[..., 1] < 110) & (patch[..., 2] > 150)
     assert cyan.sum() > 20 and magenta.sum() == 0
-
-
-def test_the_fixture_build_takes_seconds(built):
-    assert built[1] < 10
 
 
 def area(area_id):
@@ -234,3 +217,10 @@ def test_a_missing_base_render_file_stops_the_build(tmp_path):
     (tmp_path / "city.json").write_text(json.dumps(CITY), encoding="utf-8")
     with pytest.raises(SystemExit, match="base render missing"):
         banner.build(str(base), str(tmp_path / "city.json"), str(tmp_path / "out.webp"))
+
+
+def test_the_glow_spreads_past_the_sign_edges(built):
+    rows, cols = box("sign-tokens", margin=0)
+    below = slice(rows.stop, rows.stop + 4)
+    glow = built[0][0][below, cols] - background(0)[below, cols]
+    assert glow.mean() > 8

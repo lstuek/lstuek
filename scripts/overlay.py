@@ -1,8 +1,4 @@
-"""Overlay plan for the city banner: what text shows in which area on every frame.
-
-Pure logic, no images (ref/banner-build.md, "Overlay plan"). Every string it returns is a
-formatted number with a fixed unit word or an approved project name; anything else stops the build.
-"""
+import bisect
 import collections
 import json
 import re
@@ -12,22 +8,20 @@ UNITS = {"tokens": "TOKENS", "commits": "COMMITS"}
 
 
 def count(value):
-    """A real positive total; a missing, partial or zero value never reaches a sign."""
     if type(value) is not int or value <= 0:
         sys.exit(f"city data missing: {value!r} is not a positive whole number")
     return value
 
 
 def short(n):
-    """23_400_000_000 -> 23.4B; the unit is picked after rounding, so 999.96M reads 1.0B."""
     for size, unit in ((10**9, "B"), (10**6, "M"), (10**3, "K")):
-        tenths = (n * 10 + size // 2) // size  # half up, in whole numbers
+        tenths = (n * 10 + size // 2) // size
         if tenths >= 10:
             return f"{tenths // 10}.{tenths % 10}{unit}"
     return str(n)
 
 
-KINDS = {"tokens": 1, "commits": 1, "hologram": 3, "billboard": 1}  # six text areas
+KINDS = {"tokens": 1, "commits": 1, "hologram": 3, "billboard": 1}
 FIELDS = {"id", "kind", "corners", "color", "blur", "reflection"}
 
 
@@ -70,12 +64,11 @@ def sign_text(kind, value):
     return f"{number} {UNITS[kind]}"
 
 
-# Lincoln's seven public project names, billboard order; New Era never appears (ref/banner-build.md, "Text").
 PROJECTS = ("Portfolio", "Bionic Wave", "KA Tech", "KA Ops", "aios", "CRM", "SystemSelect")
 HOLOGRAMS = ("Portfolio", "Bionic Wave", "KA Tech")
 FPS = 24
-FLICKER_FLOOR = 0.7  # neon dips go no deeper than 30%
-NUMBER = {"tokens": r"[1-9]\d{0,3}(\.\d[KMB])?|[1-9]\d{0,2}", "commits": r"[1-9]\d{0,2}(,\d{3})*"}
+FLICKER_FLOOR = 0.7
+NUMBER = {"tokens": r"[1-9]\d{0,2}(\.\d[KMB])?", "commits": r"[1-9]\d{0,2}(,\d{3})*"}
 
 
 def approved(text):
@@ -84,19 +77,15 @@ def approved(text):
 
 
 def frame_delays(frames):
-    """41 or 42 ms per frame, rounded on the running total so the loop sums to frames / 24 seconds."""
     edges = [round(1000 * i / FPS) for i in range(frames + 1)]
     return [b - a for a, b in zip(edges, edges[1:])]
 
 
-def slots(frames, count):
-    """Slot start frames; slot lengths differ by at most one frame."""
-    return [frames * k // count for k in range(count + 1)]
+def slots(frames, parts):
+    return [frames * k // parts for k in range(parts + 1)]
 
 
 def sweep_window(edges):
-    """About half a second (12 of 288 frames), centred in the longest billboard slot nearest the middle,
-    so the sweep never shares a frame with a billboard switch and never touches frame 1."""
     frames = edges[-1]
     length = max(2, round(frames * 12 / 288))
     middle = (len(edges) - 1) // 2
@@ -109,32 +98,27 @@ def sweep_window(edges):
 
 
 def band(step, length):
-    """The wireframe band [left, right] as fractions of the frame width: one wipe in, then one wipe out."""
     t = (step + 0.5) / length
     return [0.0, 2 * t] if t < 0.5 else [2 * t - 1, 1.0]
 
 
-def plan(city, areas, frames, flicker, projects=PROJECTS, holograms=HOLOGRAMS):
-    """Per frame: {"texts": {area id: text}, "flicker": {area id: level}, "sweep": [left, right] or None}."""
+def plan(city, areas, frames, flicker, projects=PROJECTS):
     totals = city.get("totals") if isinstance(city, dict) else None
     totals = totals if isinstance(totals, dict) else {}
     if not isinstance(flicker, list) or len(flicker) != frames:
         sys.exit(f"flicker curve needs exactly {frames} values")
-    for text in (*projects, *holograms):
-        if not approved(text):
-            sys.exit(f"privacy check failed: {text!r} is not an approved name")
     fixed = {a["id"]: sign_text(a["kind"], totals.get(a["kind"])) for a in areas if a["kind"] in UNITS}
-    fixed.update(zip((a["id"] for a in areas if a["kind"] == "hologram"), holograms, strict=True))
+    for text in (*projects, *HOLOGRAMS, *fixed.values()):
+        if not approved(text):
+            sys.exit(f"privacy check failed: {text!r} is not approved")
+    fixed.update(zip((a["id"] for a in areas if a["kind"] == "hologram"), HOLOGRAMS, strict=True))
     billboard = [a["id"] for a in areas if a["kind"] == "billboard"]
     edges = slots(frames, len(projects))
     window = sweep_window(edges)
     out = []
     for i in range(frames):
-        texts = dict(fixed, **{b: projects[next(k for k in range(len(projects)) if edges[k + 1] > i)] for b in billboard})
-        for text in texts.values():
-            if not approved(text):
-                sys.exit(f"privacy check failed: {text!r} is not approved")
+        name = projects[bisect.bisect_right(edges, i) - 1]
         level = 1.0 if i == 0 else min(1.0, max(FLICKER_FLOOR, float(flicker[i])))
-        out.append({"texts": texts, "flicker": {a["id"]: level for a in areas},
+        out.append({"texts": dict(fixed, **dict.fromkeys(billboard, name)), "flicker": {a["id"]: level for a in areas},
                     "sweep": band(i - window.start, len(window)) if i in window else None})
     return out

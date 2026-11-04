@@ -4,6 +4,7 @@ import json
 import pytest
 
 import overlay as o
+from conftest import SIZE, spots
 
 
 @pytest.mark.parametrize("tokens, expected", [(23_400_000_000, "23.4B TOKENS"), (23_449_999_999, "23.4B TOKENS"),
@@ -24,20 +25,6 @@ def test_a_missing_value_stops_the_build_and_never_shows_zero(value):
         o.sign_text("commits", value)
 
 
-SIZE = (240, 120)
-
-
-def area(id, kind, x, y, w=40, h=16):
-    return {"id": id, "kind": kind, "corners": [[x, y], [x + w, y + 2], [x + w, y + h], [x, y + h - 2]],
-            "color": "#ff2bd6", "blur": 1.5, "reflection": [[x, 100], [x + w, 100], [x + w, 112], [x, 112]]}
-
-
-def spots():
-    return {"areas": [area("sign-tokens", "tokens", 5, 6, 72, 20), area("sign-commits", "commits", 82, 6, 72, 20),
-                      area("holo-1", "hologram", 10, 40), area("holo-2", "hologram", 60, 40),
-                      area("holo-3", "hologram", 110, 40), area("billboard", "billboard", 160, 8, 76, 30)]}
-
-
 def write_spots(tmp_path, value):
     path = tmp_path / "spots.json"
     path.write_text(json.dumps(value), encoding="utf-8")
@@ -56,15 +43,15 @@ def broken(change):
 
 
 @pytest.mark.parametrize("change", [
-    lambda a: a.pop(),                                            # five areas
-    lambda a: a[3].update(id="holo-1"),                           # duplicate id
-    lambda a: a[0].update(kind="neon"),                           # unknown kind
-    lambda a: a[1].update(kind="tokens"),                         # two token signs, no commit sign
-    lambda a: a[2]["corners"][1].__setitem__(0, 241),             # corner past the right edge
-    lambda a: a[2]["corners"][0].__setitem__(1, -1),              # corner above the frame
-    lambda a: a[4].update(corners=[[5, 5], [20, 5], [35, 5], [50, 5]]),  # zero area
-    lambda a: a[5]["reflection"][2].__setitem__(1, 130),          # reflection outside the frame
-    lambda a: a[0].pop("color"),                                  # missing field
+    lambda a: a.pop(),
+    lambda a: a[3].update(id="holo-1"),
+    lambda a: a[0].update(kind="neon"),
+    lambda a: a[1].update(kind="tokens"),
+    lambda a: a[2]["corners"][1].__setitem__(0, 241),
+    lambda a: a[2]["corners"][0].__setitem__(1, -1),
+    lambda a: a[4].update(corners=[[5, 5], [20, 5], [35, 5], [50, 5]]),
+    lambda a: a[5]["reflection"][2].__setitem__(1, 130),
+    lambda a: a[0].pop("color"),
 ], ids=["five", "dup-id", "bad-kind", "kinds-count", "right", "top", "zero-area", "reflection", "no-color"])
 def test_a_broken_spot_file_stops_the_build(tmp_path, change):
     with pytest.raises(SystemExit, match="spot file"):
@@ -72,7 +59,6 @@ def test_a_broken_spot_file_stops_the_build(tmp_path, change):
 
 
 CITY = {"totals": {"tokens": 23_400_000_000, "commits": 1532, "top_language": "Python"}}
-CALM = [1.0] * 24
 
 
 def areas():
@@ -97,11 +83,8 @@ def test_the_billboard_shows_seven_names_in_order_with_even_slots(frames):
     assert [name for name, _ in slots] == ["Portfolio", "Bionic Wave", "KA Tech", "KA Ops", "aios", "CRM", "SystemSelect"]
     assert max(n for _, n in slots) - min(n for _, n in slots) <= 1
     assert "New Era" not in names
-
-
-def test_the_288_frame_loop_has_41_or_42_frame_slots():
-    names = [frame["texts"]["billboard"] for frame in plan(288)]
-    assert {sum(1 for _ in g) for _, g in itertools.groupby(names)} == {41, 42}
+    if frames == 288:
+        assert {n for _, n in slots} == {41, 42}
 
 
 def test_flicker_never_dips_below_70_percent_and_is_shared():
@@ -139,14 +122,15 @@ def test_missing_city_numbers_stop_the_build(city):
         plan(city=city)
 
 
-@pytest.mark.parametrize("names", [
-    {"holograms": ("Portfolio", "Bionic Wave", "New Era")},
-    {"projects": ("Portfolio", "Bionic Wave", "KA Tech", "KA Ops", "aios", "CRM", "acme-client-portal")},
-    {"projects": ("Portfolio", "Bionic Wave", "KA Tech", "KA Ops", "aios", "CRM", "SystemSelect", "New Era")},
+@pytest.mark.parametrize("projects, holograms", [
+    (o.PROJECTS, ("Portfolio", "Bionic Wave", "New Era")),
+    (("Portfolio", "Bionic Wave", "KA Tech", "KA Ops", "aios", "CRM", "acme-client-portal"), o.HOLOGRAMS),
+    (("Portfolio", "Bionic Wave", "KA Tech", "KA Ops", "aios", "CRM", "SystemSelect", "New Era"), o.HOLOGRAMS),
 ], ids=["hologram", "billboard", "new-era"])
-def test_an_unapproved_name_is_refused(names):
-    with pytest.raises(SystemExit, match="privacy"):
-        plan(**names)
+def test_an_unapproved_name_is_refused(monkeypatch, projects, holograms):
+    monkeypatch.setattr(o, "HOLOGRAMS", holograms)
+    with pytest.raises(SystemExit, match="privacy check failed"):
+        plan(projects=projects)
 
 
 @pytest.mark.parametrize("text", ["23.4B TOKENS", "1,532 COMMITS", "KA Ops", "SystemSelect"])
@@ -155,7 +139,7 @@ def test_approved_strings_pass(text):
 
 
 @pytest.mark.parametrize("text", ["New Era", "23.4B COMMITS", "1532 COMMITS", "0x1F TOKENS", "kaops", "aios-private",
-                                  "1,532 COMMITS\n", "23.4T TOKENS"])
+                                  "1,532 COMMITS\n", "23.4T TOKENS", "1000 TOKENS", "1000.0B TOKENS"])
 def test_anything_else_is_not_approved(text):
     assert not o.approved(text)
 
