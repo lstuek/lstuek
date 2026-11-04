@@ -3,6 +3,6 @@
 
 - [docs/](docs/index.md) — Matt Pocock's skill files: the domain glossary, docs/agents/ (tracker, labels, domain setup) and docs/adr/ (Lincoln 2026-10-16, plans/2026-10-16-pocock-base/spec.md); .scratch/ is a dotfolder and always allowed
 - [ref/](ref/index.md) — PRD: profile card, slice 1
-- [scripts/](scripts/) — tooling
+- [scripts/](scripts/index.md) — tooling
 - media: [assets/](assets/) — 5 images — media the product ships
-- media: [tests/](tests/) — 22 images — tests when they do not live inside the code folder
+- media: [tests/](tests/) — 30 images — tests when they do not live inside the code folder
