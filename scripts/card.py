@@ -174,11 +174,6 @@ def fmt_int(n):
     return f"{int(n):,}"
 
 
-def fmt_month(ym):
-    y, m = ym.split("-")[:2]
-    return f"{MONTHS[int(m) - 1]} {y}"
-
-
 def t(x, y, text, cls, anchor=None, size=None):
     a = f' text-anchor="{anchor}"' if anchor else ""
     st = f' style="font-size:{size:.1f}px"' if size else ""
@@ -375,7 +370,7 @@ SHINE_TRAVEL = [0]  # set by p_tokens: how far the band travels (the fill width 
 def p_tokens(d, y, h):
     tk = d["tokens"]
     total = tk["total"]
-    out = [panel_title(PAD, y + 30, "TOKEN SPEND", f"since {fmt_month(tk['since'])}", "since")]
+    out = [panel_title(PAD, y + 30, "TOKEN SPEND", "all time", "since")]
     full = fmt_int(total)
     size = min(78, fit("num", full, 78, 590))
     out.append(t(PAD, y + 96, full, "bigtok", size=size))
