@@ -1,3 +1,3 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/lstuek/lstuek/main/assets/card.svg?t=1793918186" width="855" alt="Lincoln Stuek profile card: tool stack, 31 days of contributions, totals and streaks, top languages by bytes, live sites shipped, and lifetime AI token spend." />
+  <img src="https://raw.githubusercontent.com/lstuek/lstuek/main/assets/card.svg?t=1793944611" width="855" alt="Lincoln Stuek profile card: tool stack, 31 days of contributions, totals and streaks, top languages by bytes, live sites shipped, and lifetime AI token spend." />
 </p>
