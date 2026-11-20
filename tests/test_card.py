@@ -36,7 +36,7 @@ def test_fixture_values_appear_on_the_card(tmp_path):
         "9,355",                         # lifetime contributions (two calendars)
         "18", "53", "18/53",             # current streak, best streak, bar label
         "18,433,327,072",                # token spend, full number
-        "since Aug 2026", "18.4B/20B",
+        "all time", "18.4B/20B",
         "Codex",                         # null icon: text label
     ] + [n for n, _ in top6] + [f"{b * 100 / total:.1f}%" for _, b in top6]
     low = [x.lower() for x in shown]  # the default label style is uppercase
@@ -144,11 +144,11 @@ def test_label_styles(tmp_path):
     d = card.gather(str(FIX))
     a, b, c = (label_texts(card.build(d, k)) for k in ("a", "b", "c"))
     assert "23 TOOLS" in a and "1,231 IN THE LAST 31 DAYS" in a and "ALL TIME" in a and "BY BYTES" in a and "LIVE SITES" in a
-    assert "SINCE AUG 2026" in a and "GITHUB.COM/LSTUEK" in a and "SEP 10" in a and "TODAY" in a
+    assert not any("SINCE" in s for s in a) and "GITHUB.COM/LSTUEK" in a and "SEP 10" in a and "TODAY" in a
     assert "23 tools" in b and "1,231 in the last 31 days" in b and "github.com/lstuek" in b and "live sites" in b
     assert set(b) - set(c) == {"23 tools", "live sites", "github.com/lstuek", "profile card, updated 2026-10-11 00:29 utc"}
     assert "23 tools" not in c and "live sites" not in c and "github.com/lstuek" not in c
-    assert "1,231 in the last 31 days" in c and "all time" in c and "since Aug 2026" in c
+    assert "1,231 in the last 31 days" in c and "all time" in c and not any("since" in s for s in c)
     assert card.build(d) == card.build(d, "a") and card.STYLE == "a"  # the default is option a
 
 
